@@ -120,9 +120,12 @@
             function renderHistory(history) {
                 historyList.innerHTML = "";
 
-                const recentEvents = history.slice(0, 8);
+                const completedFeeds = history
+                    .filter(entry => entry && entry.status === "COMPLETED")
+                    .filter((entry, index, list) => list.findIndex(item => item.eventId && item.eventId === entry.eventId) === index)
+                    .slice(0, 8);
 
-                if (recentEvents.length === 0) {
+                if (completedFeeds.length === 0) {
                     const emptyItem = document.createElement("li");
                     emptyItem.className = "status-card";
                     emptyItem.innerHTML = "<strong>No feed history yet</strong><span>No feed events have been recorded.</span>";
@@ -130,13 +133,13 @@
                     return;
                 }
 
-                recentEvents.forEach(entry => {
+                completedFeeds.forEach(entry => {
                     const item = document.createElement("li");
                     item.className = "status-card";
                     item.style.marginBottom = "12px";
                     item.innerHTML = `
-                        <strong>${entry.supporterName || "Anonymous supporter"}</strong>
-                        <span>${entry.status || "UNKNOWN"} • ${formatTimestamp(entry.recordedAt || entry.timestamp)}</span>
+                        <strong>Thank you, ${entry.supporterName || "Anonymous supporter"}, for feeding the alpacas.</strong>
+                        <span>${formatTimestamp(entry.recordedAt || entry.timestamp)}</span>
                     `;
                     historyList.appendChild(item);
                 });

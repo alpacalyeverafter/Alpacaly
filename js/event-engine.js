@@ -301,7 +301,7 @@ class EventEngine {
         }
 
         this.completedFeeds += 1;
-        this.logEvent(event, "COMPLETED", null, {
+        this.recordCompletedFeed(event, {
             hardwareConfirmation: "HARDWARE_SEQUENCE_CONFIRMED",
             bellResult,
             feedResult
@@ -321,6 +321,30 @@ class EventEngine {
             currentEvent: event,
             error: reason
         });
+    }
+
+    recordCompletedFeed(event, details = {}) {
+        if (!event || !event.id) {
+            return;
+        }
+
+        const completedEntry = this.eventHistory.find(entry => entry.eventId === event.id && entry.status === "COMPLETED");
+        if (completedEntry) {
+            return;
+        }
+
+        this.eventHistory.push({
+            eventId: event.id,
+            type: event.type || "FEED_DONATION",
+            source: event.source || "website",
+            supporterName: event.supporterName || "Anonymous supporter",
+            status: "COMPLETED",
+            reason: null,
+            recordedAt: new Date().toISOString(),
+            ...details
+        });
+
+        this.persistSnapshot();
     }
 
     logEvent(event, status, reason = null, details = {}) {
