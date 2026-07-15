@@ -1,0 +1,341 @@
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    background-color: #f4f7f1;
+    color: #263126;
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+}
+
+.navigation {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+
+    padding: 18px 6%;
+
+    background-color: #173f24;
+    color: white;
+}
+
+.brand {
+    font-size: 21px;
+    font-weight: bold;
+}
+
+.navigation-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.navigation-links a {
+    color: white;
+    text-decoration: none;
+    font-size: 15px;
+}
+
+.navigation-links a:hover {
+    text-decoration: underline;
+}
+
+.hero {
+    padding: 38px 6% 70px;
+    text-align: center;
+}
+
+.hero-image {
+    display: block;
+
+    width: 100%;
+    max-width: 1200px;
+    height: 500px;
+
+    margin: 0 auto 35px;
+
+    object-fit: cover;
+
+    border-radius: 18px;
+}
+
+.hero-content {
+    max-width: 900px;
+    margin: auto;
+}
+
+h1 {
+    margin: 5px 0 15px;
+
+    color: #1d5a2d;
+    font-size: 52px;
+    line-height: 1.1;
+}
+
+h2 {
+    margin-top: 0;
+
+    color: #254d2d;
+    font-size: 34px;
+    line-height: 1.25;
+}
+
+h3 {
+    color: #254d2d;
+}
+
+p {
+    font-size: 18px;
+}
+
+.label {
+    margin-bottom: 8px;
+
+    color: #5c7b42;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.introduction {
+    max-width: 760px;
+    margin: 0 auto 25px;
+
+    color: #455045;
+    font-size: 20px;
+}
+
+.button-group {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 14px;
+
+    margin-top: 25px;
+}
+
+.button {
+    display: inline-block;
+
+    padding: 15px 26px;
+
+    background-color: #1f672e;
+    color: white;
+
+    border-radius: 9px;
+
+    font-size: 17px;
+    font-weight: bold;
+    text-decoration: none;
+
+    transition: background-color 0.2s;
+}
+
+.button:hover {
+    background-color: #164a21;
+}
+
+.section {
+    padding: 75px 7%;
+    text-align: center;
+}
+
+.section > p {
+    max-width: 800px;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.alternate {
+    background-color: #e7efe2;
+}
+
+.live-placeholder {
+    position: relative;
+
+    max-width: 950px;
+    min-height: 380px;
+
+    margin: 35px auto;
+    padding: 130px 30px 30px;
+
+    background-color: #172019;
+    color: white;
+
+    border-radius: 16px;
+}
+
+.live-placeholder h3 {
+    color: white;
+    font-size: 28px;
+}
+
+.live-badge {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+
+    padding: 8px 13px;
+
+    background-color: #b82525;
+    color: white;
+
+    border-radius: 6px;
+
+    font-weight: bold;
+}
+
+.status-grid,
+.card-grid,
+.donation-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+
+    max-width: 1100px;
+    margin: 35px auto 0;
+}
+
+.status-card,
+.animal-card,
+.feature-card,
+.donation-card {
+    padding: 28px;
+
+    background-color: white;
+
+    border: 1px solid #dbe3d6;
+    border-radius: 14px;
+}
+
+.status-card strong,
+.donation-card strong {
+    display: block;
+
+    color: #1f672e;
+    font-size: 30px;
+}
+
+.status-card span,
+.donation-card span {
+    display: block;
+
+    margin-top: 8px;
+
+    color: #566056;
+}
+
+.animal-placeholder {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    width: 120px;
+    height: 120px;
+
+    margin: 0 auto 20px;
+
+    background-color: #dce9d7;
+
+    border-radius: 50%;
+
+    font-size: 55px;
+}
+
+.text-link {
+    color: #1f672e;
+    font-weight: bold;
+}
+
+.support-section {
+    background-color: #173f24;
+    color: white;
+}
+
+.support-section h2,
+.support-section .label {
+    color: white;
+}
+
+.support-section .donation-card {
+    color: #263126;
+}
+
+.button-light {
+    margin-top: 30px;
+
+    background-color: white;
+    color: #173f24;
+}
+
+.button-light:hover {
+    background-color: #e7efe2;
+}
+
+.welfare-note {
+    margin-top: 28px;
+
+    font-size: 15px;
+    opacity: 0.9;
+}
+
+footer {
+    padding: 35px 20px;
+
+    background-color: #0f2b18;
+    color: white;
+
+    text-align: center;
+}
+
+footer p {
+    margin: 6px;
+    font-size: 14px;
+}
+
+@media (max-width: 800px) {
+
+    .navigation {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .navigation-links {
+        gap: 12px;
+    }
+
+    .hero-image {
+        height: 330px;
+    }
+
+    h1 {
+        font-size: 38px;
+    }
+
+    h2 {
+        font-size: 28px;
+    }
+
+    .status-grid,
+    .card-grid,
+    .donation-options {
+        grid-template-columns: 1fr;
+    }
+
+    .section {
+        padding: 55px 6%;
+    }
+}
