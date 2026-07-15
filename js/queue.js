@@ -1,20 +1,23 @@
-// ==========================================
+// ============================================
 // Alpacaly Ever After
 // Event Queue
-// ==========================================
+// ============================================
 
 class EventQueue {
     constructor() {
         this.events = [];
-        this.queuedEventIds = new Set();
+        this.knownEventIds = new Set();
     }
 
     add(event) {
         if (!event || !event.id) {
-            throw new Error("A valid event with an ID is required.");
+            return {
+                accepted: false,
+                reason: "INVALID_EVENT"
+            };
         }
 
-        if (this.queuedEventIds.has(event.id)) {
+        if (this.knownEventIds.has(event.id)) {
             return {
                 accepted: false,
                 reason: "DUPLICATE_EVENT"
@@ -22,7 +25,7 @@ class EventQueue {
         }
 
         this.events.push(event);
-        this.queuedEventIds.add(event.id);
+        this.knownEventIds.add(event.id);
 
         return {
             accepted: true,
@@ -36,7 +39,7 @@ class EventQueue {
         }
 
         const event = this.events.shift();
-        this.queuedEventIds.delete(event.id);
+        this.knownEventIds.delete(event.id);
 
         return event;
     }
@@ -56,12 +59,12 @@ class EventQueue {
     }
 
     contains(eventId) {
-        return this.queuedEventIds.has(eventId);
+        return this.knownEventIds.has(eventId);
     }
 
     clear() {
         this.events = [];
-        this.queuedEventIds.clear();
+        this.knownEventIds.clear();
     }
 
     getAll() {
