@@ -23,7 +23,7 @@ class EventEngine {
             message: "Ready for the next supporter.",
             currentEvent: null,
             completedFeeds: 0,
-            feedsRemaining: this.config.dailyFeedLimit,
+            feedsRemaining: this.config.DEMO_MAX_FEEDS,
             queueSize: 0,
             error: null
         };
@@ -55,6 +55,15 @@ class EventEngine {
         return this.eventHistory.map(entry => ({ ...entry }));
     }
 
+    getQueueSummary() {
+        return this.queue.getAll().map(event => ({
+            eventId: event && event.id ? event.id : null,
+            supporterName: event && event.supporterName ? event.supporterName : "Anonymous supporter",
+            status: "QUEUED",
+            queuedAt: event && event.createdAt ? event.createdAt : new Date().toISOString()
+        }));
+    }
+
     restoreSnapshot() {
         if (typeof window === "undefined" || !window.localStorage) {
             this.persistSnapshot();
@@ -76,14 +85,42 @@ class EventEngine {
 
             this.completedFeeds = Number(saved.completedFeeds ?? 0) || 0;
             this.eventHistory = Array.isArray(saved.history) ? saved.history.map(entry => ({ ...entry })) : [];
+            this.seenEventIds = new Set();
+
+            this.queue.clear();
+
+            const restoredQueue = Array.isArray(saved.queue) ? saved.queue : [];
+            if (restoredQueue.length > 0) {
+                restoredQueue.forEach(event => {
+                    if (event && event.id) {
+                        this.queue.add({ ...event });
+                    }
+                });
+            } else if (Array.isArray(saved.queueSummary)) {
+                saved.queueSummary.forEach((entry, index) => {
+                    if (!entry || !entry.eventId) {
+                        return;
+                    }
+
+                    this.queue.add({
+                        id: entry.eventId,
+                        type: "FEED_DONATION",
+                        source: "restored",
+                        supporterName: entry.supporterName || "Anonymous supporter",
+                        amount: 0,
+                        message: "",
+                        createdAt: entry.queuedAt || new Date().toISOString()
+                    });
+                });
+            }
 
             this.state = {
                 status: saved.status || "READY",
                 message: saved.message || "Ready for the next supporter.",
                 currentEvent: saved.currentEvent ? { ...saved.currentEvent } : null,
                 completedFeeds: this.completedFeeds,
-                feedsRemaining: Number(saved.feedsRemaining ?? Math.max(0, this.config.dailyFeedLimit - this.completedFeeds)) || 0,
-                queueSize: Number(saved.queueSize ?? 0) || 0,
+                feedsRemaining: Number(saved.feedsRemaining ?? Math.max(0, this.config.DEMO_MAX_FEEDS - this.completedFeeds)) || 0,
+                queueSize: this.queue.size(),
                 error: saved.error ?? null
             };
         } catch (error) {
@@ -103,13 +140,15 @@ class EventEngine {
         try {
             window.localStorage.setItem("alpacaly-event-engine", JSON.stringify({
                 completedFeeds: this.completedFeeds,
-                feedsRemaining: Math.max(0, this.config.dailyFeedLimit - this.completedFeeds),
-                queueSize: this.state.queueSize ?? this.queue.size(),
+                feedsRemaining: Math.max(0, this.config.DEMO_MAX_FEEDS - this.completedFeeds),
+                queueSize: this.queue.size(),
                 status: this.state.status,
                 message: this.state.message,
                 currentEvent: this.state.currentEvent ? { ...this.state.currentEvent } : null,
                 error: this.state.error ?? null,
-                history: this.getEventHistory()
+                history: this.getEventHistory(),
+                queue: this.queue.getAll().map(event => ({ ...event })),
+                queueSummary: this.getQueueSummary()
             }));
         } catch (error) {
             console.warn("[EventEngine] Unable to persist state to localStorage.", error);
@@ -170,7 +209,7 @@ class EventEngine {
 
         this.logEvent(event, "QUEUED");
         this.setState("QUEUED", `Thank you, ${event.supporterName}. Your feed is queued.`, {
-            currentEvent: event,
+            currentEvent: this.processing || this.state.currentEvent ? this.state.currentEvent : null,
             error: null
         });
 
@@ -209,7 +248,7 @@ class EventEngine {
     }
 
     checkWelfareRules(now = new Date()) {
-        if (this.completedFeeds >= this.config.dailyFeedLimit) {
+        if (this.completedFeeds >= this.config.DEMO_MAX_FEEDS) {
             return {
                 allowed: false,
                 reason: "DAILY_LIMIT_REACHED",
@@ -369,7 +408,7 @@ class EventEngine {
             status,
             message,
             completedFeeds: this.completedFeeds,
-            feedsRemaining: Math.max(0, this.config.dailyFeedLimit - this.completedFeeds),
+            feedsRemaining: Math.max(0, this.config.DEMO_MAX_FEEDS - this.completedFeeds),
             queueSize: this.queue.size()
         };
 
@@ -383,6 +422,35 @@ class EventEngine {
         });
 
         this.persistSnapshot();
+    }
+
+    resetDemo() {
+        this.processing = false;
+        this.completedFeeds = 0;
+        this.seenEventIds = new Set();
+        this.eventHistory = [];
+        this.queue.clear();
+
+        this.state = {
+            status: "READY",
+            message: "Ready for the next supporter.",
+            currentEvent: null,
+            completedFeeds: 0,
+            feedsRemaining: this.config.DEMO_MAX_FEEDS,
+            queueSize: 0,
+            error: null
+        };
+
+        this.persistSnapshot();
+
+        const snapshot = this.getState();
+        this.listeners.forEach(listener => {
+            try {
+                listener(snapshot);
+            } catch (error) {
+                console.error("[EventEngine] Listener failed:", error);
+            }
+        });
     }
 
     cleanSupporterName(name) {

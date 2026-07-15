@@ -7,7 +7,7 @@ const CONFIG = {
 
     simulationMode: true,
 
-    dailyFeedLimit: 20,
+    DEMO_MAX_FEEDS: 100,
 
     countdownSeconds: 10,
 

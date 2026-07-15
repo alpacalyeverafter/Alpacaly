@@ -1,5 +1,7 @@
 alert("javascript is connected"); 
-let feedsRemaining = 20;
+let feedsRemaining = typeof CONFIG !== "undefined" && CONFIG.DEMO_MAX_FEEDS
+    ? CONFIG.DEMO_MAX_FEEDS
+    : 100;
 let countdownSeconds = 10;
 let sequenceRunning = false;
 
