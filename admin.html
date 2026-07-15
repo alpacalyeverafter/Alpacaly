@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpacaly Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navigation">
+        <div class="brand">🦙 Alpacaly Ever After</div>
+        <div class="navigation-links">
+            <a href="index.html">Home</a>
+            <a href="admin.html">Admin</a>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="hero-content">
+            <p class="label">Operations Dashboard</p>
+            <h1>Admin Overview</h1>
+            <p class="introduction">Monitor live feed activity, queue health and payment activity for the rescue barn.</p>
+        </div>
+
+        <section class="section">
+            <div class="status-grid">
+                <article class="status-card">
+                    <strong id="total-feeds-today">0</strong>
+                    <span>Total Feeds Today</span>
+                </article>
+                <article class="status-card">
+                    <strong id="feeds-remaining">0</strong>
+                    <span>Feeds Remaining</span>
+                </article>
+                <article class="status-card">
+                    <strong id="queue-size">0</strong>
+                    <span>Queue Size</span>
+                </article>
+                <article class="status-card">
+                    <strong id="total-payments">0</strong>
+                    <span>Total Payments</span>
+                </article>
+                <article class="status-card">
+                    <strong id="revenue-today">£0.00</strong>
+                    <span>Revenue Today (£)</span>
+                </article>
+                <article class="status-card">
+                    <strong id="gateway-status">Ready</strong>
+                    <span>Payment Gateway</span>
+                </article>
+            </div>
+        </section>
+
+        <section class="section alternate" style="margin-top: 24px; border-radius: 16px; text-align: left;">
+            <div class="label">Recent Feed History</div>
+            <ul id="feed-history-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 20px auto 0;"></ul>
+        </section>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/queue.js"></script>
+    <script src="js/hardware.js"></script>
+    <script src="js/event-engine.js"></script>
+    <script src="js/payment-gateway.js"></script>
+    <script>
+        (() => {
+            const stateElements = {
+                totalFeedsToday: document.getElementById("total-feeds-today"),
+                feedsRemaining: document.getElementById("feeds-remaining"),
+                queueSize: document.getElementById("queue-size"),
+                totalPayments: document.getElementById("total-payments"),
+                revenueToday: document.getElementById("revenue-today"),
+                gatewayStatus: document.getElementById("gateway-status")
+            };
+
+            const historyList = document.getElementById("feed-history-list");
+            const EVENT_STORAGE_KEY = "alpacaly-event-engine";
+            const PAYMENT_STORAGE_KEY = "alpacaly-payment-gateway";
+
+            function formatCurrency(value) {
+                return `£${Number(value || 0).toFixed(2)}`;
+            }
+
+            function formatTimestamp(value) {
+                if (!value) {
+                    return "—";
+                }
+
+                const date = new Date(value);
+                return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+            }
+
+            function readStoredDashboardData() {
+                let engineData = { state: {}, history: [] };
+                let payments = [];
+
+                try {
+                    if (window.localStorage) {
+                        const storedEngine = window.localStorage.getItem(EVENT_STORAGE_KEY);
+                        if (storedEngine) {
+                            const parsedEngine = JSON.parse(storedEngine);
+                            if (parsedEngine && typeof parsedEngine === "object") {
+                                engineData = parsedEngine;
+                            }
+                        }
+
+                        const storedPayments = window.localStorage.getItem(PAYMENT_STORAGE_KEY);
+                        if (storedPayments) {
+                            const parsedPayments = JSON.parse(storedPayments);
+                            payments = Array.isArray(parsedPayments) ? parsedPayments : [];
+                        }
+                    }
+                } catch (error) {
+                    console.warn("[Admin] Unable to read dashboard data from localStorage.", error);
+                }
+
+                return { engineData, payments };
+            }
+
+            function renderHistory(history) {
+                historyList.innerHTML = "";
+
+                const recentEvents = history.slice(0, 8);
+
+                if (recentEvents.length === 0) {
+                    const emptyItem = document.createElement("li");
+                    emptyItem.className = "status-card";
+                    emptyItem.innerHTML = "<strong>No feed history yet</strong><span>No feed events have been recorded.</span>";
+                    historyList.appendChild(emptyItem);
+                    return;
+                }
+
+                recentEvents.forEach(entry => {
+                    const item = document.createElement("li");
+                    item.className = "status-card";
+                    item.style.marginBottom = "12px";
+                    item.innerHTML = `
+                        <strong>${entry.supporterName || "Anonymous supporter"}</strong>
+                        <span>${entry.status || "UNKNOWN"} • ${formatTimestamp(entry.recordedAt || entry.timestamp)}</span>
+                    `;
+                    historyList.appendChild(item);
+                });
+            }
+
+            function refreshDashboard() {
+                const { engineData, payments } = readStoredDashboardData();
+                const history = Array.isArray(engineData.history) ? engineData.history : [];
+                const completedFeeds = history.filter(entry => entry && entry.status === "COMPLETED");
+                const completedCount = Number(engineData.completedFeeds ?? completedFeeds.length) || 0;
+
+                stateElements.totalFeedsToday.textContent = String(completedCount);
+                stateElements.feedsRemaining.textContent = String(engineData.feedsRemaining ?? 0);
+                stateElements.queueSize.textContent = String(engineData.queueSize ?? 0);
+
+                const totalPayments = payments.length;
+                const revenue = payments.reduce((total, payment) => total + Number(payment.amount || 0), 0);
+
+                stateElements.totalPayments.textContent = String(totalPayments);
+                stateElements.revenueToday.textContent = formatCurrency(revenue);
+                stateElements.gatewayStatus.textContent = "Local Storage";
+
+                renderHistory(history);
+            }
+
+            refreshDashboard();
+            setInterval(refreshDashboard, 1000);
+        })();
+    </script>
+</body>
+</html>

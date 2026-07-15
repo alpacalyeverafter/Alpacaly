@@ -120,6 +120,9 @@
     updateCountdownDisplay();
     window.setInterval(tickCountdown, 1000);
 
+    window.eventEngine = eventEngine;
+    window.paymentGateway = paymentGateway;
+
     // Useful for safe browser-console testing during development.
     window.alpacalyEventEngine = eventEngine;
 })();

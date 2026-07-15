@@ -27,6 +27,8 @@ class EventEngine {
             queueSize: 0,
             error: null
         };
+
+        this.restoreSnapshot();
     }
 
     subscribe(listener) {
@@ -51,6 +53,67 @@ class EventEngine {
 
     getEventHistory() {
         return this.eventHistory.map(entry => ({ ...entry }));
+    }
+
+    restoreSnapshot() {
+        if (typeof window === "undefined" || !window.localStorage) {
+            this.persistSnapshot();
+            return;
+        }
+
+        try {
+            const raw = window.localStorage.getItem("alpacaly-event-engine");
+            if (!raw) {
+                this.persistSnapshot();
+                return;
+            }
+
+            const saved = JSON.parse(raw);
+            if (!saved || typeof saved !== "object") {
+                this.persistSnapshot();
+                return;
+            }
+
+            this.completedFeeds = Number(saved.completedFeeds ?? 0) || 0;
+            this.eventHistory = Array.isArray(saved.history) ? saved.history.map(entry => ({ ...entry })) : [];
+
+            this.state = {
+                status: saved.status || "READY",
+                message: saved.message || "Ready for the next supporter.",
+                currentEvent: saved.currentEvent ? { ...saved.currentEvent } : null,
+                completedFeeds: this.completedFeeds,
+                feedsRemaining: Number(saved.feedsRemaining ?? Math.max(0, this.config.dailyFeedLimit - this.completedFeeds)) || 0,
+                queueSize: Number(saved.queueSize ?? 0) || 0,
+                error: saved.error ?? null
+            };
+        } catch (error) {
+            console.warn("[EventEngine] Unable to restore state from localStorage.", error);
+            this.persistSnapshot();
+            return;
+        }
+
+        this.persistSnapshot();
+    }
+
+    persistSnapshot() {
+        if (typeof window === "undefined" || !window.localStorage) {
+            return;
+        }
+
+        try {
+            window.localStorage.setItem("alpacaly-event-engine", JSON.stringify({
+                completedFeeds: this.completedFeeds,
+                feedsRemaining: Math.max(0, this.config.dailyFeedLimit - this.completedFeeds),
+                queueSize: this.state.queueSize ?? this.queue.size(),
+                status: this.state.status,
+                message: this.state.message,
+                currentEvent: this.state.currentEvent ? { ...this.state.currentEvent } : null,
+                error: this.state.error ?? null,
+                history: this.getEventHistory()
+            }));
+        } catch (error) {
+            console.warn("[EventEngine] Unable to persist state to localStorage.", error);
+        }
     }
 
     createDonationEvent({ supporterName, source = "website", amount = 0, message = "" }) {
@@ -271,6 +334,8 @@ class EventEngine {
             recordedAt: new Date().toISOString(),
             ...details
         });
+
+        this.persistSnapshot();
     }
 
     setState(status, message, extra = {}) {
@@ -292,6 +357,8 @@ class EventEngine {
                 console.error("[EventEngine] Listener failed:", error);
             }
         });
+
+        this.persistSnapshot();
     }
 
     cleanSupporterName(name) {
