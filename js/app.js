@@ -111,7 +111,14 @@
 
         if (!result.accepted) {
             supporterMessage.textContent = result.message || "The feed event was not accepted.";
+            return;
         }
+
+        void paymentGateway.processPayment({
+            supporterName: name,
+            amount: 5,
+            eventId: event.id
+        });
     }
 
     sponsorButton.addEventListener("click", submitDemoFeed);

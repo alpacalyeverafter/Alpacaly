@@ -24,6 +24,10 @@ class PaymentGateway {
             }
 
             const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && Array.isArray(parsed.payments)) {
+                return parsed.payments;
+            }
+
             return Array.isArray(parsed) ? parsed : [];
         } catch (error) {
             console.warn("[PaymentGateway] Unable to read payments from localStorage.", error);
@@ -37,7 +41,9 @@ class PaymentGateway {
         }
 
         try {
-            window.localStorage.setItem("alpacaly-payment-gateway", JSON.stringify(this.payments));
+            window.localStorage.setItem("alpacaly-payment-gateway", JSON.stringify({
+                payments: this.payments
+            }));
         } catch (error) {
             console.warn("[PaymentGateway] Unable to persist payments to localStorage.", error);
         }
@@ -57,7 +63,7 @@ class PaymentGateway {
         return `pay-${Date.now()}-${randomPart}`;
     }
 
-    async processPayment({ supporterName = "", amount = 0 } = {}) {
+    async processPayment({ supporterName = "", amount = 0, eventId = null } = {}) {
         const normalizedAmount = Number(amount);
 
         if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
@@ -78,17 +84,25 @@ class PaymentGateway {
         }
 
         const paymentResult = {
-            success: true,
             paymentId,
+            eventId: eventId || null,
             supporterName: this.cleanSupporterName(supporterName),
             amount: normalizedAmount,
-            timestamp: new Date().toISOString()
+            currency: "GBP",
+            status: "SUCCEEDED",
+            createdAt: new Date().toISOString()
         };
 
-        this.payments.push(paymentResult);
-        this.persistPayments();
+        const existingPayment = this.payments.find(entry => entry.paymentId === paymentId);
+        if (!existingPayment) {
+            this.payments.push(paymentResult);
+            this.persistPayments();
+        }
 
-        return paymentResult;
+        return {
+            success: true,
+            ...paymentResult
+        };
     }
 }
 

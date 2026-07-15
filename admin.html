@@ -107,7 +107,11 @@
                         const storedPayments = window.localStorage.getItem(PAYMENT_STORAGE_KEY);
                         if (storedPayments) {
                             const parsedPayments = JSON.parse(storedPayments);
-                            payments = Array.isArray(parsedPayments) ? parsedPayments : [];
+                            if (parsedPayments && typeof parsedPayments === "object" && Array.isArray(parsedPayments.payments)) {
+                                payments = parsedPayments.payments;
+                            } else {
+                                payments = Array.isArray(parsedPayments) ? parsedPayments : [];
+                            }
                         }
                     }
                 } catch (error) {
@@ -155,8 +159,18 @@
                 stateElements.feedsRemaining.textContent = String(engineData.feedsRemaining ?? 0);
                 stateElements.queueSize.textContent = String(engineData.queueSize ?? 0);
 
-                const totalPayments = payments.length;
-                const revenue = payments.reduce((total, payment) => total + Number(payment.amount || 0), 0);
+                const today = new Date().toLocaleDateString("en-CA");
+                const todaysPayments = payments.filter(payment => {
+                    if (!payment || payment.status !== "SUCCEEDED") {
+                        return false;
+                    }
+
+                    const paymentDate = new Date(payment.createdAt || payment.timestamp || payment.created_at || Date.now());
+                    return Number.isNaN(paymentDate.getTime()) ? false : paymentDate.toLocaleDateString("en-CA") === today;
+                });
+
+                const totalPayments = todaysPayments.length;
+                const revenue = todaysPayments.reduce((total, payment) => total + Number(payment.amount || 0), 0);
 
                 stateElements.totalPayments.textContent = String(totalPayments);
                 stateElements.revenueToday.textContent = formatCurrency(revenue);
