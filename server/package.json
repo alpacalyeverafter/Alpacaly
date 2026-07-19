@@ -1,0 +1,23 @@
+{
+  "name": "alpacaly-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Phase 1 backend for Alpacaly Ever After",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "pino": "^9.7.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.1"
+  }
+}
