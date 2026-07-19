@@ -3,7 +3,11 @@ import test from "node:test";
 
 import { ApplicationError } from "../src/errors/application-error.js";
 import { EventEngine } from "../src/event-engine/event-engine.js";
-import { createTestLogger, testConfig } from "./helpers.js";
+import {
+    createTestLogger,
+    submitTestFeedRequest,
+    testConfig
+} from "./helpers.js";
 
 function createEngine(overrides = {}) {
     const config = { ...testConfig, ...overrides.config };
@@ -19,7 +23,7 @@ function createEngine(overrides = {}) {
 
 test("queues a valid feed request", () => {
     const engine = createEngine();
-    const result = engine.submitFeedRequest({
+    const result = submitTestFeedRequest(engine, {
         supporterName: "  Ada  ",
         source: "website",
         message: "  For the herd  ",
@@ -44,22 +48,22 @@ test("rejects a feed request without a supporter name", () => {
     const engine = createEngine();
 
     assert.throws(
-        () => engine.submitFeedRequest({ supporterName: " " }),
+        () => submitTestFeedRequest(engine, { supporterName: " " }),
         error => error instanceof ApplicationError
             && error.code === "VALIDATION_ERROR"
             && error.statusCode === 400
     );
 });
 
-test("rejects a duplicate client request ID", () => {
+test("returns the existing feed for a duplicate website event", () => {
     const engine = createEngine();
     const payload = { supporterName: "Ada", clientRequestId: "duplicate-1" };
-    engine.submitFeedRequest(payload);
+    const first = submitTestFeedRequest(engine, payload);
+    const duplicate = submitTestFeedRequest(engine, payload);
 
-    assert.throws(
-        () => engine.submitFeedRequest(payload),
-        error => error.code === "DUPLICATE_FEED_REQUEST" && error.statusCode === 409
-    );
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(duplicate.feedRequest.eventId, first.feedRequest.eventId);
+    assert.equal(engine.getQueueSummary().length, 1);
 });
 
 test("enforces the configured daily feed limit", () => {
@@ -68,10 +72,10 @@ test("enforces the configured daily feed limit", () => {
         config: { maxDailyFeeds: 1 },
         idGenerator: () => String(++id)
     });
-    engine.submitFeedRequest({ supporterName: "First" });
+    submitTestFeedRequest(engine, { supporterName: "First" });
 
     assert.throws(
-        () => engine.submitFeedRequest({ supporterName: "Second" }),
+        () => submitTestFeedRequest(engine, { supporterName: "Second" }),
         error => error.code === "DAILY_FEED_LIMIT_REACHED" && error.statusCode === 409
     );
 });
@@ -87,7 +91,7 @@ test("rejects requests outside an enforced feeding window", () => {
     });
 
     assert.throws(
-        () => engine.submitFeedRequest({ supporterName: "Early supporter" }),
+        () => submitTestFeedRequest(engine, { supporterName: "Early supporter" }),
         error => error.code === "OUTSIDE_FEEDING_WINDOW" && error.statusCode === 409
     );
 });
@@ -102,12 +106,15 @@ test("supports feeding windows that cross midnight", () => {
         clock: () => new Date(2026, 6, 19, 23, 0, 0)
     });
 
-    assert.equal(engine.submitFeedRequest({ supporterName: "Night supporter" }).queuePosition, 1);
+    assert.equal(
+        submitTestFeedRequest(engine, { supporterName: "Night supporter" }).queuePosition,
+        1
+    );
 });
 
 test("returns a supporter-safe queue summary", () => {
     const engine = createEngine();
-    engine.submitFeedRequest({
+    submitTestFeedRequest(engine, {
         supporterName: "Ada",
         message: "Not included in the queue summary",
         clientRequestId: "not-in-summary"
@@ -135,8 +142,8 @@ test("calculates queue positions and estimated wait times from lifecycle duratio
         },
         idGenerator: () => String(++id)
     });
-    const first = engine.submitFeedRequest({ supporterName: "First" });
-    const second = engine.submitFeedRequest({ supporterName: "Second" });
+    const first = submitTestFeedRequest(engine, { supporterName: "First" });
+    const second = submitTestFeedRequest(engine, { supporterName: "Second" });
 
     assert.equal(first.feedRequest.queuePosition, 1);
     assert.equal(first.feedRequest.estimatedWaitMs, 0);
@@ -156,7 +163,10 @@ test("calculates queue positions and estimated wait times from lifecycle duratio
 
 test("resets all persistent demo state", () => {
     const engine = createEngine();
-    engine.submitFeedRequest({ supporterName: "Ada", clientRequestId: "reset-1" });
+    submitTestFeedRequest(engine, {
+        supporterName: "Ada",
+        clientRequestId: "reset-1"
+    });
 
     const snapshot = engine.reset();
     assert.equal(snapshot.queueSize, 0);
@@ -167,7 +177,9 @@ test("resets all persistent demo state", () => {
 
 test("runs every lifecycle state once with a timestamp", async () => {
     const engine = createEngine({ autoProcess: true });
-    const submitted = engine.submitFeedRequest({ supporterName: "Lifecycle supporter" });
+    const submitted = submitTestFeedRequest(engine, {
+        supporterName: "Lifecycle supporter"
+    });
 
     await engine.waitForIdle();
 
@@ -208,8 +220,8 @@ test("preserves FIFO queue order through archival", async () => {
         }
     });
 
-    const first = engine.submitFeedRequest({ supporterName: "First" });
-    const second = engine.submitFeedRequest({ supporterName: "Second" });
+    const first = submitTestFeedRequest(engine, { supporterName: "First" });
+    const second = submitTestFeedRequest(engine, { supporterName: "Second" });
     await engine.waitForIdle();
 
     assert.deepEqual(archivedOrder, [first.feedRequest.id, second.feedRequest.id]);
@@ -221,7 +233,7 @@ test("preserves FIFO queue order through archival", async () => {
 
 test("prevents duplicate lifecycle processing", async () => {
     const engine = createEngine();
-    const submitted = engine.submitFeedRequest({ supporterName: "Single pass" });
+    const submitted = submitTestFeedRequest(engine, { supporterName: "Single pass" });
 
     await Promise.all([
         engine.processQueue(),
@@ -237,7 +249,7 @@ test("prevents duplicate lifecycle processing", async () => {
 
 test("stores future hardware acknowledgements without controlling hardware", () => {
     const engine = createEngine();
-    const submitted = engine.submitFeedRequest({ supporterName: "Hardware future" });
+    const submitted = submitTestFeedRequest(engine, { supporterName: "Hardware future" });
 
     const acknowledgement = engine.recordHardwareAcknowledgement(
         submitted.feedRequest.id,

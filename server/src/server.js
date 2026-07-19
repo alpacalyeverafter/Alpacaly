@@ -28,6 +28,7 @@ async function shutdown(signal) {
     });
 
     try {
+        app.locals.contributionLedgerServices.outboxWorker.stop();
         await app.locals.eventEngine.shutdown();
     } catch (error) {
         logger.error({

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ApplicationError } from "../errors/application-error.js";
 import { SqliteEventStore } from "../event-store/sqlite-event-store.js";
+import { FeederQueueManager } from "./feeder-queue-manager.js";
 import {
     FEED_LIFECYCLE_STATES,
     HARDWARE_ACKNOWLEDGEMENT_STAGES,
@@ -79,25 +80,23 @@ export class EventEngine {
             databasePath: config.databasePath || ":memory:",
             logger
         });
+        this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
 
         this.feedRequests = new Map();
-        this.queue = [];
-        this.archivedEventIds = [];
+        this.queueRuntimes = new FeederQueueManager(
+            this.eventStore.getResources().queues
+        );
         this.clientRequestIds = new Map();
         this.processingEventIds = new Set();
         this.processedEventIds = new Set();
         this.listeners = new Set();
         this.idleResolvers = new Set();
+        this.shutdownResolvers = new Set();
 
-        this.processing = false;
-        this.processingScheduled = false;
-        this.activeEventId = null;
         this.lifecycleGeneration = 0;
         this.lifecycleAbortController = new AbortController();
         this.shuttingDown = false;
         this.sequenceNumber = 0;
-        this.acceptedToday = 0;
-        this.completedToday = 0;
         this.lastUpdatedAt = null;
         this.currentDateKey = localDateKey(this.clock());
 
@@ -105,8 +104,32 @@ export class EventEngine {
         this.scheduleProcessing();
     }
 
-    submitFeedRequest(payload) {
+    createFeedRequestFromFeedIntent(payload, {
+        feederId = this.defaultResourceAssignment.feederId,
+        feedIntentId,
+        contributionId,
+        auditRecord = null
+    } = {}) {
+        if (typeof feedIntentId !== "string" || !feedIntentId.trim()) {
+            throw new ApplicationError(
+                "A durable FeedIntent is required to create a feed request.",
+                {
+                    code: "FEED_INTENT_REQUIRED",
+                    statusCode: 409
+                }
+            );
+        }
+        if (typeof contributionId !== "string" || !contributionId.trim()) {
+            throw new ApplicationError(
+                "A verified Contribution is required to create a feed request.",
+                {
+                    code: "CONTRIBUTION_REQUIRED",
+                    statusCode: 409
+                }
+            );
+        }
         const input = this.validateFeedRequest(payload);
+        const queueRuntime = this.requireQueueRuntime(feederId);
         const now = this.clock();
         this.rollDailyCounters(now);
 
@@ -120,7 +143,7 @@ export class EventEngine {
             });
         }
 
-        if (this.acceptedToday >= this.config.maxDailyFeeds) {
+        if (queueRuntime.acceptedToday >= this.config.maxDailyFeeds) {
             throw new ApplicationError("Today's safe feeding limit has been reached.", {
                 code: "DAILY_FEED_LIMIT_REACHED",
                 statusCode: 409
@@ -155,6 +178,11 @@ export class EventEngine {
             source: input.source,
             message: input.message,
             clientRequestId: input.clientRequestId,
+            contributionId: contributionId.trim(),
+            feedIntentId: feedIntentId.trim(),
+            barnId: queueRuntime.barnId,
+            feederId: queueRuntime.feederId,
+            queueId: queueRuntime.queueId,
             requestedAt: now.toISOString(),
             updatedAt: now.toISOString(),
             stateTimestamps: {},
@@ -180,13 +208,13 @@ export class EventEngine {
             { persist: false, emit: false }
         );
 
-        this.queue.push(id);
-        this.acceptedToday += 1;
+        queueRuntime.eventIds.push(id);
+        queueRuntime.acceptedToday += 1;
         if (input.clientRequestId) {
             this.clientRequestIds.set(input.clientRequestId, id);
         }
 
-        const queuePosition = this.queue.length;
+        const queuePosition = queueRuntime.eventIds.length;
         this.transitionTo(
             feedRequest,
             "QUEUED",
@@ -195,11 +223,14 @@ export class EventEngine {
         );
 
         try {
-            this.eventStore.createQueuedEvent(feedRequest);
+            this.eventStore.createQueuedEvent(feedRequest, {
+                auditRecord,
+                feedIntentId: feedRequest.feedIntentId
+            });
         } catch (error) {
             this.feedRequests.delete(id);
-            this.queue.pop();
-            this.acceptedToday -= 1;
+            queueRuntime.eventIds.pop();
+            queueRuntime.acceptedToday -= 1;
             this.sequenceNumber = previousSequenceNumber;
             this.lastUpdatedAt = previousLastUpdatedAt;
             if (input.clientRequestId) {
@@ -226,16 +257,21 @@ export class EventEngine {
             eventId: id,
             clientRequestId: input.clientRequestId,
             source: input.source,
+            feederId: feedRequest.feederId,
+            queueId: feedRequest.queueId,
             sequenceNumber: feedRequest.sequenceNumber,
             queuePosition
         }, "Feed request queued");
 
-        this.scheduleProcessing();
+        this.scheduleProcessing(feedRequest.feederId);
 
         return {
             feedRequest: this.getFeedRequest(id),
             queuePosition,
-            estimatedWaitMs: this.estimateWaitForQueueIndex(queuePosition - 1)
+            estimatedWaitMs: this.estimateWaitForQueueIndex(
+                queuePosition - 1,
+                feedRequest.feederId
+            )
         };
     }
 
@@ -245,18 +281,20 @@ export class EventEngine {
             return null;
         }
 
-        const queueIndex = this.queue.indexOf(id);
+        const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+        const queueIndex = queueRuntime.eventIds.indexOf(id);
         return {
             ...this.cloneFeedRequest(feedRequest),
             queuePosition: queueIndex >= 0 ? queueIndex + 1 : null,
             estimatedWaitMs: queueIndex >= 0
-                ? this.estimateWaitForQueueIndex(queueIndex)
+                ? this.estimateWaitForQueueIndex(queueIndex, feedRequest.feederId)
                 : 0
         };
     }
 
-    getQueueSummary() {
-        return this.queue
+    getQueueSummary(feederId = this.defaultResourceAssignment.feederId) {
+        const queueRuntime = this.requireQueueRuntime(feederId);
+        return queueRuntime.eventIds
             .map((id, index) => {
                 const feedRequest = this.feedRequests.get(id);
                 return feedRequest
@@ -266,11 +304,51 @@ export class EventEngine {
             .filter(Boolean);
     }
 
-    getArchivedSummary() {
-        return this.archivedEventIds
+    getArchivedSummary(feederId = this.defaultResourceAssignment.feederId) {
+        const queueRuntime = this.requireQueueRuntime(feederId);
+        return queueRuntime.archivedEventIds
             .map(id => this.feedRequests.get(id))
             .filter(Boolean)
             .map(feedRequest => this.summarizeFeedRequest(feedRequest));
+    }
+
+    getQueueStatistics(feederId = this.defaultResourceAssignment.feederId) {
+        const queueRuntime = this.requireQueueRuntime(feederId);
+        const activeEvent = queueRuntime.activeEventId
+            ? this.feedRequests.get(queueRuntime.activeEventId)
+            : null;
+
+        return {
+            barnId: queueRuntime.barnId,
+            feederId: queueRuntime.feederId,
+            queueId: queueRuntime.queueId,
+            feederStatus: activeEvent
+                ? activeEvent.state
+                : queueRuntime.eventIds.length > 0 ? "QUEUED" : "READY",
+            waitingCount: Math.max(
+                0,
+                queueRuntime.eventIds.length - (activeEvent ? 1 : 0)
+            ),
+            activeCount: activeEvent ? 1 : 0,
+            archivedCount: queueRuntime.archivedEventIds.length,
+            estimatedWaitMs: queueRuntime.eventIds.reduce((total, eventId) => {
+                const feedRequest = this.feedRequests.get(eventId);
+                return total + (
+                    feedRequest ? this.estimateRemainingLifecycleMs(feedRequest) : 0
+                );
+            }, 0),
+            activeEvent: activeEvent ? this.summarizeFeedRequest(activeEvent) : null
+        };
+    }
+
+    getAllQueueStatistics() {
+        return [...this.queueRuntimes.values()]
+            .sort((left, right) => left.feederId.localeCompare(right.feederId))
+            .map(queueRuntime => this.getQueueStatistics(queueRuntime.feederId));
+    }
+
+    getDefaultFeederId() {
+        return this.defaultResourceAssignment.feederId;
     }
 
     subscribe(listener) {
@@ -329,16 +407,10 @@ export class EventEngine {
         this.lifecycleAbortController = new AbortController();
         this.lifecycleGeneration += 1;
         this.feedRequests.clear();
-        this.queue = [];
-        this.archivedEventIds = [];
+        this.queueRuntimes.resetState();
         this.clientRequestIds.clear();
         this.processingEventIds.clear();
         this.processedEventIds.clear();
-        this.processing = false;
-        this.processingScheduled = false;
-        this.activeEventId = null;
-        this.acceptedToday = 0;
-        this.completedToday = 0;
         this.sequenceNumber = 0;
         this.lastUpdatedAt = this.clock().toISOString();
         this.currentDateKey = localDateKey(this.clock());
@@ -360,44 +432,64 @@ export class EventEngine {
     getSnapshot() {
         const now = this.clock();
         this.rollDailyCounters(now);
-        const activeEvent = this.activeEventId
-            ? this.feedRequests.get(this.activeEventId)
+        const queueRuntime = this.requireQueueRuntime(
+            this.defaultResourceAssignment.feederId
+        );
+        const activeEvent = queueRuntime.activeEventId
+            ? this.feedRequests.get(queueRuntime.activeEventId)
             : null;
 
         return {
             status: activeEvent
                 ? activeEvent.state
-                : this.queue.length > 0 ? "QUEUED" : "READY",
+                : queueRuntime.eventIds.length > 0 ? "QUEUED" : "READY",
             date: this.currentDateKey,
-            queueSize: this.queue.length,
-            waitingQueueSize: Math.max(0, this.queue.length - (activeEvent ? 1 : 0)),
-            acceptedToday: this.acceptedToday,
-            completedFeeds: this.completedToday,
-            archivedCount: this.archivedEventIds.length,
-            feedsRemaining: Math.max(0, this.config.maxDailyFeeds - this.acceptedToday),
+            queueSize: queueRuntime.eventIds.length,
+            waitingQueueSize: Math.max(
+                0,
+                queueRuntime.eventIds.length - (activeEvent ? 1 : 0)
+            ),
+            acceptedToday: queueRuntime.acceptedToday,
+            completedFeeds: queueRuntime.completedToday,
+            archivedCount: queueRuntime.archivedEventIds.length,
+            feedsRemaining: Math.max(
+                0,
+                this.config.maxDailyFeeds - queueRuntime.acceptedToday
+            ),
             feedingWindowEnforced: this.config.enforceFeedingWindow,
             activeEvent: activeEvent ? this.summarizeFeedRequest(activeEvent) : null,
             lastUpdatedAt: this.lastUpdatedAt
         };
     }
 
-    async processQueue() {
-        if (this.processing) {
+    async processQueue(feederId = this.defaultResourceAssignment.feederId) {
+        const queueRuntime = this.requireQueueRuntime(feederId);
+        if (queueRuntime.processing) {
             return this.waitForIdle();
         }
 
-        this.processing = true;
+        queueRuntime.processing = true;
         const generation = this.lifecycleGeneration;
 
         try {
-            while (this.queue.length > 0 && generation === this.lifecycleGeneration) {
-                const eventId = this.queue[0];
+            while (
+                queueRuntime.eventIds.length > 0
+                && generation === this.lifecycleGeneration
+            ) {
+                const eventId = queueRuntime.eventIds[0];
                 const feedRequest = this.feedRequests.get(eventId);
 
                 if (!feedRequest || this.processedEventIds.has(eventId)) {
                     this.eventStore.removeFromQueue(eventId);
-                    this.queue.shift();
+                    queueRuntime.eventIds.shift();
                     continue;
+                }
+
+                if (feedRequest.feederId !== queueRuntime.feederId) {
+                    throw new ApplicationError("Feed queues are not isolated correctly.", {
+                        code: "QUEUE_RESOURCE_VIOLATION",
+                        statusCode: 500
+                    });
                 }
 
                 if (this.processingEventIds.has(eventId)) {
@@ -408,7 +500,7 @@ export class EventEngine {
                 }
 
                 this.processingEventIds.add(eventId);
-                this.activeEventId = eventId;
+                queueRuntime.activeEventId = eventId;
 
                 let archived = false;
                 try {
@@ -421,7 +513,7 @@ export class EventEngine {
                     break;
                 }
 
-                if (this.queue[0] !== eventId) {
+                if (queueRuntime.eventIds[0] !== eventId) {
                     throw new ApplicationError("Feed queue order changed during processing.", {
                         code: "QUEUE_ORDER_VIOLATION",
                         statusCode: 500
@@ -429,31 +521,33 @@ export class EventEngine {
                 }
 
                 this.eventStore.removeFromQueue(eventId);
-                this.queue.shift();
+                queueRuntime.eventIds.shift();
                 this.processedEventIds.add(eventId);
-                this.archivedEventIds.push(eventId);
-                this.activeEventId = null;
-                this.emitEngineUpdate("EVENT_ARCHIVED");
+                queueRuntime.archivedEventIds.push(eventId);
+                queueRuntime.activeEventId = null;
+                this.emitEngineUpdate("EVENT_ARCHIVED", queueRuntime.feederId);
             }
         } catch (error) {
             this.logger.error({
                 event: "event_lifecycle_failed",
-                eventId: this.activeEventId,
+                eventId: queueRuntime.activeEventId,
+                feederId: queueRuntime.feederId,
                 err: error
             }, "Event lifecycle failed");
         } finally {
             if (generation === this.lifecycleGeneration || this.shuttingDown) {
-                this.processing = false;
-                this.processingScheduled = false;
-                this.activeEventId = null;
-                this.emitEngineUpdate("QUEUE_IDLE");
+                queueRuntime.processing = false;
+                queueRuntime.processingScheduled = false;
+                queueRuntime.activeEventId = null;
+                this.emitEngineUpdate("QUEUE_IDLE", queueRuntime.feederId);
                 this.resolveIdleWaiters();
+                this.resolveShutdownWaiters();
             }
         }
     }
 
     waitForIdle() {
-        if (!this.processing && !this.processingScheduled && this.queue.length === 0) {
+        if (this.isCompletelyIdle()) {
             return Promise.resolve();
         }
 
@@ -528,13 +622,14 @@ export class EventEngine {
                 return false;
             }
 
-            this.completedToday += 1;
+            const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+            queueRuntime.completedToday += 1;
             try {
                 this.transitionTo(feedRequest, "COMPLETE", {
                     mode: "SIMULATED_LIFECYCLE"
                 });
             } catch (error) {
-                this.completedToday -= 1;
+                queueRuntime.completedToday -= 1;
                 throw error;
             }
         }
@@ -719,6 +814,33 @@ export class EventEngine {
         this.recalculateDailyCounters();
     }
 
+    requireQueueRuntime(feederId) {
+        const normalizedFeederId = typeof feederId === "string" ? feederId.trim() : "";
+        if (!normalizedFeederId) {
+            throw new ApplicationError("feederId is required.", {
+                code: "VALIDATION_ERROR",
+                statusCode: 400,
+                details: ["feederId is required"]
+            });
+        }
+
+        const existing = this.queueRuntimes.get(normalizedFeederId);
+        if (existing) {
+            return existing;
+        }
+
+        const queue = this.eventStore.getQueueForFeeder(normalizedFeederId);
+        if (!queue) {
+            throw new ApplicationError("Feeder not found.", {
+                code: "FEEDER_NOT_FOUND",
+                statusCode: 404,
+                details: { feederId: normalizedFeederId }
+            });
+        }
+
+        return this.queueRuntimes.register(queue);
+    }
+
     restoreFromEventStore() {
         const restored = this.eventStore.loadState();
         const queuedEventIds = new Set(restored.queueEventIds);
@@ -733,7 +855,8 @@ export class EventEngine {
             }
 
             if (feedRequest.state === "ARCHIVED") {
-                this.archivedEventIds.push(feedRequest.eventId);
+                this.requireQueueRuntime(feedRequest.feederId)
+                    .archivedEventIds.push(feedRequest.eventId);
                 this.processedEventIds.add(feedRequest.eventId);
             } else if (!queuedEventIds.has(feedRequest.eventId)) {
                 throw new Error(
@@ -746,32 +869,56 @@ export class EventEngine {
             }
         });
 
-        restored.queueEventIds.forEach(eventId => {
-            const feedRequest = this.feedRequests.get(eventId);
+        restored.queueEntries.forEach(queueEntry => {
+            const feedRequest = this.feedRequests.get(queueEntry.eventId);
             if (!feedRequest) {
-                throw new Error(`Queue references unknown persistent event ${eventId}.`);
+                throw new Error(
+                    `Queue references unknown persistent event ${queueEntry.eventId}.`
+                );
             }
 
             if (feedRequest.state === "ARCHIVED") {
-                this.eventStore.removeFromQueue(eventId);
+                this.eventStore.removeFromQueue(queueEntry.eventId);
                 return;
             }
 
-            this.queue.push(eventId);
+            const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+            if (
+                queueRuntime.queueId !== queueEntry.queueId
+                || feedRequest.queueId !== queueEntry.queueId
+            ) {
+                throw new Error(
+                    `Queue resource is invalid for persistent event ${feedRequest.eventId}.`
+                );
+            }
+            queueRuntime.eventIds.push(feedRequest.eventId);
         });
 
         this.recalculateDailyCounters();
         this.logger.info({
             event: "event_store_restored",
             eventCount: this.feedRequests.size,
-            queueSize: this.queue.length,
-            archivedCount: this.archivedEventIds.length
+            queueCount: this.queueRuntimes.size,
+            queueSize: this.totalQueuedEvents(),
+            archivedCount: this.totalArchivedEvents()
         }, "Event Engine state restored from SQLite");
     }
 
     validateRestoredEvent(feedRequest) {
         if (!isLifecycleState(feedRequest.state)) {
             throw new Error(`Persistent event ${feedRequest.eventId} has an invalid state.`);
+        }
+
+        if (!feedRequest.barnId || !feedRequest.feederId || !feedRequest.queueId) {
+            throw new Error(`Persistent event ${feedRequest.eventId} is missing resource identities.`);
+        }
+
+        if (!feedRequest.contributionId) {
+            throw new Error(`Persistent event ${feedRequest.eventId} is missing its Contribution.`);
+        }
+
+        if (!feedRequest.feedIntentId) {
+            throw new Error(`Persistent event ${feedRequest.eventId} is missing its FeedIntent.`);
         }
 
         const stateIndex = FEED_LIFECYCLE_STATES.indexOf(feedRequest.state);
@@ -786,27 +933,33 @@ export class EventEngine {
     }
 
     recalculateDailyCounters() {
-        this.acceptedToday = 0;
-        this.completedToday = 0;
+        this.queueRuntimes.forEach(queueRuntime => {
+            queueRuntime.acceptedToday = 0;
+            queueRuntime.completedToday = 0;
+        });
 
         this.feedRequests.forEach(feedRequest => {
+            const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
             if (localDateKey(new Date(feedRequest.requestedAt)) === this.currentDateKey) {
-                this.acceptedToday += 1;
+                queueRuntime.acceptedToday += 1;
             }
 
             const completedAt = feedRequest.stateTimestamps.COMPLETE;
             if (completedAt && localDateKey(new Date(completedAt)) === this.currentDateKey) {
-                this.completedToday += 1;
+                queueRuntime.completedToday += 1;
             }
         });
     }
 
-    estimateWaitForQueueIndex(queueIndex) {
+    estimateWaitForQueueIndex(
+        queueIndex,
+        feederId = this.defaultResourceAssignment.feederId
+    ) {
         if (!Number.isInteger(queueIndex) || queueIndex <= 0) {
             return 0;
         }
 
-        return this.queue
+        return this.requireQueueRuntime(feederId).eventIds
             .slice(0, queueIndex)
             .reduce((total, eventId) => {
                 const feedRequest = this.feedRequests.get(eventId);
@@ -860,39 +1013,83 @@ export class EventEngine {
         return Math.max(0, durationMs - Math.max(0, this.clock().getTime() - startedAt));
     }
 
-    scheduleProcessing() {
+    scheduleProcessing(feederId = null) {
+        if (!this.autoProcess) {
+            return;
+        }
+
+        if (feederId === null) {
+            this.queueRuntimes.forEach(queueRuntime => {
+                this.scheduleProcessing(queueRuntime.feederId);
+            });
+            return;
+        }
+
+        const queueRuntime = this.requireQueueRuntime(feederId);
         if (
-            !this.autoProcess
-            || this.queue.length === 0
-            || this.processing
-            || this.processingScheduled
+            queueRuntime.eventIds.length === 0
+            || queueRuntime.processing
+            || queueRuntime.processingScheduled
         ) {
             return;
         }
 
-        this.processingScheduled = true;
+        queueRuntime.processingScheduled = true;
         queueMicrotask(() => {
-            this.processingScheduled = false;
+            queueRuntime.processingScheduled = false;
             if (!this.autoProcess || this.shuttingDown) {
                 this.resolveIdleWaiters();
+                this.resolveShutdownWaiters();
                 return;
             }
-            void this.processQueue();
+            void this.processQueue(queueRuntime.feederId);
         });
     }
 
     resolveIdleWaiters() {
+        if (!this.isCompletelyIdle()) {
+            return;
+        }
         this.idleResolvers.forEach(resolve => resolve());
         this.idleResolvers.clear();
     }
 
+    resolveShutdownWaiters() {
+        if (this.hasProcessingActivity()) {
+            return;
+        }
+        this.shutdownResolvers.forEach(resolve => resolve());
+        this.shutdownResolvers.clear();
+    }
+
+    hasProcessingActivity() {
+        return this.queueRuntimes.hasProcessingActivity();
+    }
+
+    isCompletelyIdle() {
+        return this.queueRuntimes.isCompletelyIdle();
+    }
+
+    totalQueuedEvents() {
+        return this.queueRuntimes.totalQueuedEvents();
+    }
+
+    totalArchivedEvents() {
+        return this.queueRuntimes.totalArchivedEvents();
+    }
+
     summarizeFeedRequest(feedRequest, extra = {}) {
-        const queueIndex = this.queue.indexOf(feedRequest.eventId);
+        const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+        const queueIndex = queueRuntime.eventIds.indexOf(feedRequest.eventId);
         return {
             id: feedRequest.id,
             eventId: feedRequest.eventId,
             supporterName: feedRequest.supporterName,
             source: feedRequest.source,
+            contributionId: feedRequest.contributionId,
+            barnId: feedRequest.barnId,
+            feederId: feedRequest.feederId,
+            queueId: feedRequest.queueId,
             state: feedRequest.state,
             status: feedRequest.status,
             sequenceNumber: feedRequest.sequenceNumber,
@@ -903,7 +1100,7 @@ export class EventEngine {
             hardwareAcknowledgements: clone(feedRequest.hardwareAcknowledgements),
             queuePosition: queueIndex >= 0 ? queueIndex + 1 : null,
             estimatedWaitMs: queueIndex >= 0
-                ? this.estimateWaitForQueueIndex(queueIndex)
+                ? this.estimateWaitForQueueIndex(queueIndex, feedRequest.feederId)
                 : 0,
             ...extra
         };
@@ -935,16 +1132,21 @@ export class EventEngine {
             timestamp: timelineEntry.timestamp,
             timelineEntry: clone(timelineEntry),
             feedRequest: feedRequestAtTransition,
-            eventEngine: this.getSnapshot()
+            eventEngine: this.getSnapshot(),
+            queueStatistics: this.getQueueStatistics(feedRequest.feederId)
         });
     }
 
-    emitEngineUpdate(reason) {
-        this.emit({
+    emitEngineUpdate(reason, feederId = this.defaultResourceAssignment.feederId) {
+        const payload = {
             type: "EVENT_ENGINE_UPDATED",
             reason,
             eventEngine: this.getSnapshot()
-        });
+        };
+        if (this.queueRuntimes.has(feederId)) {
+            payload.queueStatistics = this.getQueueStatistics(feederId);
+        }
+        this.emit(payload);
     }
 
     emit(payload) {
@@ -961,7 +1163,7 @@ export class EventEngine {
     }
 
     close() {
-        if (this.processing || this.processingScheduled) {
+        if (this.hasProcessingActivity()) {
             throw new Error("Event Engine cannot close while lifecycle processing is active.");
         }
 
@@ -978,13 +1180,15 @@ export class EventEngine {
         this.lifecycleGeneration += 1;
         this.lifecycleAbortController.abort();
 
-        if (this.processing) {
+        if (this.hasProcessingActivity()) {
             await new Promise(resolve => {
-                this.idleResolvers.add(resolve);
+                this.shutdownResolvers.add(resolve);
             });
         }
 
-        this.processingScheduled = false;
+        this.queueRuntimes.forEach(queueRuntime => {
+            queueRuntime.processingScheduled = false;
+        });
         this.eventStore.close();
     }
 }

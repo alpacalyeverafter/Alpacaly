@@ -50,7 +50,7 @@
         }
 
         createFeedRequest(feedRequest) {
-            return this.request("/api/feed-requests", {
+            return this.request("/api/development/website-contributions", {
                 method: "POST",
                 body: feedRequest
             });

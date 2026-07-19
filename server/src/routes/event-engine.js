@@ -2,12 +2,27 @@ import { Router } from "express";
 
 import { ApplicationError } from "../errors/application-error.js";
 
+export function lifecyclePayloadTargetsFeeder(payload, feederId) {
+    const payloadFeederId = payload?.feedRequest?.feederId
+        || payload?.queueStatistics?.feederId
+        || null;
+    return !payloadFeederId || payloadFeederId === feederId;
+}
+
 export function createEventEngineRouter({ eventEngine, config }) {
     const router = Router();
+    const defaultFeederId = eventEngine.getDefaultFeederId();
 
     router.get("/status", (req, res) => {
         res.status(200).json({
             eventEngine: eventEngine.getSnapshot(),
+            requestId: req.requestId
+        });
+    });
+
+    router.get("/queues", (req, res) => {
+        res.status(200).json({
+            queues: eventEngine.getAllQueueStatistics(),
             requestId: req.requestId
         });
     });
@@ -22,6 +37,9 @@ export function createEventEngineRouter({ eventEngine, config }) {
         res.flushHeaders();
 
         function sendLifecycleEvent(payload) {
+            if (!lifecyclePayloadTargetsFeeder(payload, defaultFeederId)) {
+                return;
+            }
             res.write("event: lifecycle\n");
             res.write(`data: ${JSON.stringify(payload)}\n\n`);
         }

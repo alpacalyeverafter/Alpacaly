@@ -106,6 +106,24 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             nodeEnv !== "production",
             "ENABLE_DEMO_RESET"
         ),
+        enableDevelopmentContributionSimulation: nodeEnv !== "production"
+            && parseBoolean(
+                env.ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION,
+                true,
+                "ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION"
+            ),
+        outboxPollIntervalMs: parseInteger(
+            env.OUTBOX_POLL_INTERVAL_MS,
+            DEFAULTS.outboxPollIntervalMs,
+            "OUTBOX_POLL_INTERVAL_MS",
+            { minimum: 10 }
+        ),
+        outboxRetryDelayMs: parseInteger(
+            env.OUTBOX_RETRY_DELAY_MS,
+            DEFAULTS.outboxRetryDelayMs,
+            "OUTBOX_RETRY_DELAY_MS",
+            { minimum: 0 }
+        ),
         lifecycleCountdownMs: parseInteger(
             env.LIFECYCLE_COUNTDOWN_MS,
             DEFAULTS.lifecycleCountdownMs,

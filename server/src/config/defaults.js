@@ -10,6 +10,8 @@ export const DEFAULTS = Object.freeze({
     requestBodyLimit: "16kb",
     corsOrigin: "*",
     databasePath: "./data/alpacaly.sqlite",
+    outboxPollIntervalMs: 250,
+    outboxRetryDelayMs: 1000,
     lifecycleCountdownMs: 10000,
     lifecycleBellMs: 3000,
     lifecycleDispensingMs: 2000,

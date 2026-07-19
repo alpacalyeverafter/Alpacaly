@@ -4,6 +4,8 @@ import test from "node:test";
 import request from "supertest";
 
 import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config/index.js";
+import { DEFAULT_RESOURCE_IDS } from "../src/domain/resources.js";
 import { EventEngine } from "../src/event-engine/event-engine.js";
 import { createTestLogger, testConfig } from "./helpers.js";
 
@@ -21,6 +23,15 @@ function createTestApp(overrides = {}) {
 
     return createApp({ config, logger, eventEngine });
 }
+
+test("production configuration disables development contribution simulation by default", () => {
+    const config = loadConfig({
+        NODE_ENV: "production",
+        DATABASE_PATH: ":memory:",
+        ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION: "true"
+    }, { loadEnvFile: false });
+    assert.equal(config.enableDevelopmentContributionSimulation, false);
+});
 
 test("GET /health reports service health", async () => {
     const response = await request(createTestApp()).get("/health").expect(200);
@@ -62,9 +73,20 @@ test("POST /api/feed-requests accepts and queues a valid request", async () => {
         .expect(202);
 
     assert.equal(response.body.accepted, true);
+    assert.equal(response.body.simulated, true);
+    assert.equal(response.body.providerEvent.provider, "WEBSITE");
+    assert.equal(response.body.providerEvent.verificationStatus, "VERIFIED");
+    assert.equal(response.body.contribution.eligibilityStatus, "ELIGIBLE");
+    assert.equal(
+        response.body.feedRequest.contributionId,
+        response.body.contribution.contributionId
+    );
     assert.equal(response.body.feedRequest.id, "feed_api-test-id");
     assert.equal(response.body.feedRequest.eventId, "feed_api-test-id");
     assert.equal(response.body.feedRequest.status, "QUEUED");
+    assert.equal(response.body.feedRequest.barnId, DEFAULT_RESOURCE_IDS.barnId);
+    assert.equal(response.body.feedRequest.feederId, DEFAULT_RESOURCE_IDS.feederId);
+    assert.equal(response.body.feedRequest.queueId, DEFAULT_RESOURCE_IDS.queueId);
     assert.deepEqual(
         response.body.feedRequest.timeline.map(entry => entry.state),
         ["RECEIVED", "VALIDATED", "QUEUED"]
@@ -75,6 +97,59 @@ test("POST /api/feed-requests accepts and queues a valid request", async () => {
     assert.equal(response.body.feedRequest.estimatedWaitMs, 0);
     assert.equal(response.body.eventEngine.queueSize, 1);
     assert.equal(response.headers.location, "/api/feed-requests/feed_api-test-id");
+});
+
+test("POST /api/development/website-contributions uses server verification", async () => {
+    const response = await request(createTestApp())
+        .post("/api/development/website-contributions")
+        .send({
+            supporterName: "Development supporter",
+            clientRequestId: "development-ledger-1",
+            amountMinor: 750,
+            currency: "GBP"
+        })
+        .expect(202);
+
+    assert.equal(response.body.simulated, true);
+    assert.equal(response.body.providerEvent.provider, "WEBSITE");
+    assert.equal(response.body.contribution.amountMinor, 750);
+    assert.equal(response.body.feedRequest.contributionId, response.body.contribution.contributionId);
+});
+
+test("development contribution endpoint rejects client-controlled verification", async () => {
+    const response = await request(createTestApp())
+        .post("/api/development/website-contributions")
+        .send({
+            supporterName: "Untrusted supporter",
+            verificationStatus: "VERIFIED"
+        })
+        .expect(400);
+
+    assert.equal(response.body.error.code, "CLIENT_VERIFICATION_FORBIDDEN");
+});
+
+test("production configuration disables all development feed writes", async () => {
+    const app = createTestApp({
+        config: {
+            nodeEnv: "production",
+            enableDevelopmentContributionSimulation: true
+        }
+    });
+    const payload = { supporterName: "Production write attempt" };
+
+    for (const path of [
+        "/api/feed-requests",
+        "/api/development/website-contributions",
+        `/api/feeders/${DEFAULT_RESOURCE_IDS.feederId}/feed-requests`
+    ]) {
+        const response = await request(app).post(path).send(payload).expect(403);
+        assert.equal(
+            response.body.error.code,
+            "DEVELOPMENT_CONTRIBUTION_SIMULATION_DISABLED"
+        );
+    }
+
+    await request(app).get("/api/feed-requests").expect(200);
 });
 
 test("GET /api/feed-requests returns the server queue", async () => {
@@ -92,6 +167,9 @@ test("GET /api/feed-requests returns the server queue", async () => {
     assert.equal(response.body.feedRequests[0].supporterName, "Grace");
     assert.equal(response.body.feedRequests[0].source, "website");
     assert.equal(response.body.feedRequests[0].status, "QUEUED");
+    assert.equal(response.body.feedRequests[0].barnId, DEFAULT_RESOURCE_IDS.barnId);
+    assert.equal(response.body.feedRequests[0].feederId, DEFAULT_RESOURCE_IDS.feederId);
+    assert.equal(response.body.feedRequests[0].queueId, DEFAULT_RESOURCE_IDS.queueId);
     assert.equal(response.body.feedRequests[0].queuePosition, 1);
     assert.equal(response.body.feedRequests[0].estimatedWaitMs, 0);
     assert.equal(response.body.feedRequests[0].timeline.length, 3);
@@ -156,13 +234,14 @@ test("POST /api/feed-requests returns validation details", async () => {
     assert.deepEqual(response.body.error.details, ["supporterName is required"]);
 });
 
-test("POST /api/feed-requests rejects duplicate client request IDs", async () => {
+test("POST /api/feed-requests idempotently returns duplicate website events", async () => {
     const app = createTestApp();
     const payload = { supporterName: "Grace", clientRequestId: "duplicate-api-1" };
-    await request(app).post("/api/feed-requests").send(payload).expect(202);
+    const first = await request(app).post("/api/feed-requests").send(payload).expect(202);
 
-    const response = await request(app).post("/api/feed-requests").send(payload).expect(409);
-    assert.equal(response.body.error.code, "DUPLICATE_FEED_REQUEST");
+    const duplicate = await request(app).post("/api/feed-requests").send(payload).expect(202);
+    assert.equal(duplicate.body.duplicate, true);
+    assert.equal(duplicate.body.feedRequest.eventId, first.body.feedRequest.eventId);
 });
 
 test("invalid JSON returns a structured 400 response", async () => {

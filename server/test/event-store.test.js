@@ -5,7 +5,11 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { EventEngine } from "../src/event-engine/event-engine.js";
-import { createTestLogger, testConfig } from "./helpers.js";
+import {
+    createTestLogger,
+    submitTestFeedRequest,
+    testConfig
+} from "./helpers.js";
 
 function temporaryDatabase(t) {
     const directory = mkdtempSync(join(tmpdir(), "alpacaly-event-store-"));
@@ -34,11 +38,23 @@ test("creates the required persistent Event Store tables", t => {
     const engine = createPersistentEngine(temporaryDatabase(t));
 
     assert.deepEqual(engine.eventStore.getTableNames(), [
+        "AuditRecords",
+        "Barns",
+        "Cameras",
+        "Contributions",
+        "Devices",
         "Events",
+        "FeedIntentHistory",
+        "FeedIntents",
+        "Feeders",
         "HardwareAcknowledgements",
         "LifecycleHistory",
-        "Queue"
+        "Outbox",
+        "ProviderEvents",
+        "Queue",
+        "Queues"
     ]);
+    assert.equal(engine.eventStore.getSchemaVersion(), 4);
 
     engine.close();
 });
@@ -49,11 +65,11 @@ test("restores Event IDs, histories, queue order, acknowledgements and duplicate
     const firstEngine = createPersistentEngine(databasePath, {
         idGenerator: () => String(++nextId)
     });
-    const first = firstEngine.submitFeedRequest({
+    const first = submitTestFeedRequest(firstEngine, {
         supporterName: "First supporter",
         clientRequestId: "persistent-client-1"
     });
-    const second = firstEngine.submitFeedRequest({
+    const second = submitTestFeedRequest(firstEngine, {
         supporterName: "Second supporter",
         clientRequestId: "persistent-client-2"
     });
@@ -72,20 +88,21 @@ test("restores Event IDs, histories, queue order, acknowledgements and duplicate
 
     const restoredFirst = restoredEngine.getFeedRequest(first.feedRequest.eventId);
     assert.deepEqual(restoredFirst.timeline, originalTimeline);
+    assert.equal(restoredFirst.barnId, first.feedRequest.barnId);
+    assert.equal(restoredFirst.feederId, first.feedRequest.feederId);
+    assert.equal(restoredFirst.queueId, first.feedRequest.queueId);
     assert.equal(
         restoredFirst.hardwareAcknowledgements.BELL.details.deviceId,
         "future-device"
     );
     assert.equal(restoredEngine.getSnapshot().acceptedToday, 2);
 
-    assert.throws(
-        () => restoredEngine.submitFeedRequest({
-            supporterName: "Duplicate retry",
-            clientRequestId: "persistent-client-1"
-        }),
-        error => error.code === "DUPLICATE_FEED_REQUEST"
-            && error.details.eventId === first.feedRequest.eventId
-    );
+    const duplicate = submitTestFeedRequest(restoredEngine, {
+        supporterName: "Duplicate retry",
+        clientRequestId: "persistent-client-1"
+    });
+    assert.equal(duplicate.feedRequest.eventId, first.feedRequest.eventId);
+    assert.equal(duplicate.duplicate, true);
 
     restoredEngine.close();
 });
@@ -93,7 +110,9 @@ test("restores Event IDs, histories, queue order, acknowledgements and duplicate
 test("restores archived events and their complete lifecycle timelines", async t => {
     const databasePath = temporaryDatabase(t);
     const firstEngine = createPersistentEngine(databasePath, { autoProcess: true });
-    const submitted = firstEngine.submitFeedRequest({ supporterName: "Archived supporter" });
+    const submitted = submitTestFeedRequest(firstEngine, {
+        supporterName: "Archived supporter"
+    });
     await firstEngine.waitForIdle();
     const original = firstEngine.getFeedRequest(submitted.feedRequest.eventId);
     firstEngine.close();
@@ -119,7 +138,7 @@ test("resumes an interrupted lifecycle from the persisted state and remaining de
             throw new Error("simulated process interruption");
         }
     });
-    const submitted = interruptedEngine.submitFeedRequest({
+    const submitted = submitTestFeedRequest(interruptedEngine, {
         supporterName: "Restarted supporter",
         clientRequestId: "restart-client"
     });
@@ -175,7 +194,9 @@ test("graceful shutdown cancels an active delay without losing its restart state
             signal.addEventListener("abort", resolve, { once: true });
         })
     });
-    const submitted = engine.submitFeedRequest({ supporterName: "Shutdown supporter" });
+    const submitted = submitTestFeedRequest(engine, {
+        supporterName: "Shutdown supporter"
+    });
     await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(engine.getFeedRequest(submitted.feedRequest.eventId).state, "COUNTDOWN");

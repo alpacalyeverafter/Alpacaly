@@ -30,7 +30,10 @@ test("browser API client submits feed requests to the configured backend", async
 
     await client.createFeedRequest({ supporterName: "Ada" });
 
-    assert.equal(capturedRequest.url, "http://localhost:3000/api/feed-requests");
+    assert.equal(
+        capturedRequest.url,
+        "http://localhost:3000/api/development/website-contributions"
+    );
     assert.equal(capturedRequest.options.method, "POST");
     assert.deepEqual(JSON.parse(capturedRequest.options.body), { supporterName: "Ada" });
 });
