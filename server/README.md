@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7A backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
+This directory contains the Phase 7B-1 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, immutable operator audit records, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
 
-## Phase 7A boundaries
+## Phase 7B-1 boundaries
 
 Included:
 
@@ -39,6 +39,14 @@ Included:
 - Server-calculated queue positions and estimated wait times
 - Supporter display of the live Event ID, lifecycle state, queue position, and wait estimate
 - Admin display of the live queue, active event, archive, and server connection status
+- Provider-neutral `AuthProvider` boundary for a future managed OpenID Connect provider
+- Development-only, server-controlled administrator identities
+- Persisted Administrators, RoleAssignments, BarnScopes, and append-only OperatorAuditRecords
+- `VIEWER`, `WELFARE_OPERATOR`, `HARDWARE_OPERATOR`, and `ADMINISTRATOR` permissions
+- Barn-scoped authorization with explicit platform-wide assignments
+- Protected administrator, queue-history, device-command, welfare, and reset APIs
+- Durable feeder pause/unavailable/maintenance and device pause/maintenance state
+- Public API presenters that omit supporter identity, Contribution data, lifecycle internals, and hardware details
 - REST polling fallback and automatic recovery after temporary server outages
 - Future-facing bell and dispensing acknowledgement records
 - Restart-safe duplicate protection across ProviderEvents, Contributions, FeedIntents, Outbox entries, and Events
@@ -51,7 +59,8 @@ Intentionally excluded:
 
 - Stripe or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
-- Authentication and authorisation
+- Real managed OpenID Connect provider integration, passwords, and production sessions
+- Dual approval, emergency stop, and manual `OUTCOME_UNKNOWN` resolution
 - Real hardware transports, feeder control, MQTT, GPIO, Raspberry Pi, or ESP32 integration
 - Camera integration or streaming
 - Live-video integration
@@ -90,6 +99,7 @@ The default server address is `http://localhost:3000`.
 | `DATABASE_PATH` | `./data/alpacaly.sqlite` | SQLite Event Store path, resolved from the server working directory. |
 | `ENABLE_DEMO_RESET` | development only | Enables the Reset Demo button and reset endpoint outside production. |
 | `ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION` | development only | Enables simulated WEBSITE Contributions and legacy write adapters. Always disabled when `NODE_ENV=production`. |
+| `ENABLE_DEVELOPMENT_AUTHENTICATION` | `false` | Explicitly enables server-controlled local administrator identities in development or test. It is always rejected in production. The example development environment enables it. |
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | Delay between background checks for durable FeedIntent work. |
 | `OUTBOX_RETRY_DELAY_MS` | `1000` | Delay before retrying a failed Outbox processing attempt. |
 | `DEVICE_COMMAND_POLL_INTERVAL_MS` | `100` | Delay between durable Device Command reconciliation passes. |
@@ -105,7 +115,7 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Existing Events are preserved and receive no fabricated command history; commands are created only when those Events enter or resume `BELL` and `DISPENSING`. The principal relationships are:
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Existing Events, histories, commands, acknowledgements, queues, and contribution audit data are preserved. Commands are created only when Events enter or resume `BELL` and `DISPENSING`. The principal relationships are:
 
 ```sql
 CREATE TABLE Events (
@@ -356,7 +366,7 @@ Content-Type: application/json
 }
 ```
 
-This development-only endpoint creates a `WEBSITE` ProviderEvent, applies server-controlled simulated verification, atomically persists its Contribution, FeedIntent, and Outbox entry, and synchronously asks the worker to process the durable work so the existing response remains unchanged. `amountMinor` is always stored as an integer. Supplying the same `clientRequestId` again returns the original ledger records and Event rather than creating duplicates. The endpoint rejects client-supplied provider, verification, eligibility, contribution, or feed-quantity decisions and is unconditionally disabled in production.
+This development-only endpoint creates a `WEBSITE` ProviderEvent, applies server-controlled simulated verification, atomically persists its Contribution, FeedIntent, and Outbox entry, and synchronously asks the worker to process the durable work. `amountMinor` is always stored as an integer. Supplying the same `clientRequestId` again returns the original Event rather than creating duplicates. The public response contains only the supporter-safe Event status; ProviderEvent, Contribution, raw metadata, supporter identity, and hardware details remain server-side. The endpoint rejects client-supplied provider, verification, eligibility, contribution, or feed-quantity decisions and is unconditionally disabled in production.
 
 ### Legacy development write adapter
 
@@ -380,7 +390,7 @@ This route remains temporarily for compatibility, but no longer creates an Event
 GET /api/feed-requests
 ```
 
-Returns supporter-safe summaries for the active persistent FIFO queue and archive. Each summary includes its current state, queue position, estimated wait time, and timeline. Messages and client request IDs are omitted.
+Returns supporter-safe summaries for the active persistent FIFO queue and archive. Each summary includes its Event ID, current state, queue position, and estimated wait time. Supporter names, messages, client request IDs, Contribution links, complete timelines, and hardware acknowledgement details are omitted.
 
 ### Read one feed request
 
@@ -388,7 +398,7 @@ Returns supporter-safe summaries for the active persistent FIFO queue and archiv
 GET /api/feed-requests/:feedRequestId
 ```
 
-Returns the current representation, queue position, estimated wait time, and complete persistent timeline of an accepted request, or HTTP 404 for an unknown ID. Server restarts do not invalidate Event IDs.
+Returns the current supporter-safe state, queue position, and estimated wait time of an accepted request, or HTTP 404 for an unknown ID. Complete timelines and private supporter information are available only through a scoped administrator API. Server restarts do not invalidate Event IDs.
 
 ### Legacy feeder development write adapter
 
@@ -406,7 +416,7 @@ GET /api/feeders/:feederId/queue
 GET /api/feeders/:feederId/feed-requests
 ```
 
-Both forms return that feeder's isolated waiting/active queue, archive, and statistics. Statistics include waiting count, active count, archived count, estimated wait, feeder status, and active event.
+Both forms return supporter-safe entries for that feeder's isolated waiting/active queue, archive, and statistics. Statistics include waiting count, active count, archived count, estimated wait, feeder status, and safe active Event status.
 
 ### Read one feeder event
 
@@ -447,11 +457,44 @@ Opens a Server-Sent Events stream. The server sends a named `lifecycle` event im
 ```http
 POST /api/event-engine/reset
 Content-Type: application/json
+Authorization: Development local-admin
 
-{}
+{"reason":"Local development reset"}
 ```
 
-Clears the persistent Event Store so the existing Reset Demo button remains functional during local development. The endpoint is disabled by default when `NODE_ENV=production` and should never be enabled publicly.
+Clears Event, ledger, Outbox, command, and simulated-device state so the existing Reset Demo button remains functional during local development. Administrator identities and immutable operator audit records are retained. The endpoint requires a platform-wide `ADMINISTRATOR`, records the attempt and result, and is disabled when `ENABLE_DEMO_RESET=false`. Development authentication and reset are unavailable in production.
+
+### Administrator authentication
+
+Every `/api/admin` route requires an authenticated, active Administrator. Phase 7B-1 does not store passwords and does not connect a real identity provider. When `ENABLE_DEVELOPMENT_AUTHENTICATION=true` outside production, local clients may use one of the fixed server-controlled development credentials:
+
+```http
+Authorization: Development local-admin
+```
+
+The predefined local identities are `local-admin`, `local-viewer`, `local-welfare`, and `local-hardware`. A caller cannot supply roles or Barn scopes; the server maps each credential to persisted assignments. Production rejects this adapter even if the environment variable is set. The authentication service returns an internal trusted identity containing the mapped Administrator ID, external identity ID, active roles and Barn scopes, authentication time and strength, and a session identifier. Session identifiers and credentials are never returned in audit records.
+
+| Role | Barn-scoped capabilities |
+| --- | --- |
+| `VIEWER` | Barn/feeder status, queues, command history, and scoped audit history |
+| `WELFARE_OPERATOR` | Viewer capabilities plus feeding pause, welfare unavailability, welfare notes, and uncertain-outcome review requests |
+| `HARDWARE_OPERATOR` | Viewer capabilities plus device pause/maintenance, command failure inspection, policy-permitted retry requests, and hardware-alert acknowledgement |
+| `ADMINISTRATOR` | All capabilities plus platform-wide identity, role, Barn-scope, and security-configuration management when explicitly assigned platform-wide |
+
+Principal administrator routes include:
+
+- `GET /api/admin/session`
+- `GET /api/admin/barns/:barnId/status`
+- `GET /api/admin/barns/:barnId/queues`
+- `GET /api/admin/barns/:barnId/feeders/:feederId/feed-requests`
+- `GET /api/admin/barns/:barnId/device-commands`
+- `GET /api/admin/barns/:barnId/audit-records`
+- feeder pause, resume, welfare-unavailable, maintenance, and welfare-note actions under `/api/admin/barns/:barnId`
+- device pause, resume, and maintenance actions under `/api/admin/barns/:barnId/devices`
+- safe retry and review requests under `/api/admin/barns/:barnId/device-commands`
+- Administrator, RoleAssignment, and BarnScope management under `/api/admin/administrators`
+
+Every protected request verifies the active Administrator, required role, Barn scope, and feeder/device membership. Identity-management operations require an explicit platform-wide assignment. Sensitive successful and rejected actions append an `OperatorAuditRecord`; normal services cannot update or delete those records.
 
 Every response includes an `x-request-id` header. API errors use a consistent JSON shape containing `code`, `message`, and `requestId`.
 
@@ -465,14 +508,14 @@ The server writes newline-delimited JSON logs to standard output. Request-comple
 npm test
 ```
 
-The test suite covers FeedIntent creation, atomic Outbox processing, repeated attempts, worker recovery, and duplicate Event prevention. Phase 7A coverage adds durable command creation and Outbox state, acknowledgement-gated lifecycle advancement, unavailable-device retry, reconnection, timeout, unknown outcomes, late/duplicate/out-of-order/malformed acknowledgements, cancellation, per-feeder ordering and isolation, stale-token fencing, graceful worker stop/start, mixed pending/retrying/timed-out recovery, and file-backed crash boundaries before delivery, after simulated action, and after acknowledgement. Existing API, ledger, browser, lifecycle, migration, and multi-feeder tests remain in place.
+The test suite covers FeedIntent creation, atomic Outbox processing, repeated attempts, worker recovery, and duplicate Event prevention. Phase 7A coverage adds durable command creation and Outbox state, acknowledgement-gated lifecycle advancement, unavailable-device retry, reconnection, timeout, unknown outcomes, late/duplicate/out-of-order/malformed acknowledgements, cancellation, per-feeder ordering and isolation, stale-token fencing, graceful worker stop/start, mixed pending/retrying/timed-out recovery, and file-backed crash boundaries. Phase 7B-1 coverage adds development/production authentication boundaries, suspended/revoked identity rejection, every role and permission, Barn isolation, explicit platform access, administrator and assignment management, public privacy, immutable success/rejection audits, reset protection, operational pause/maintenance, migration, browser-client authentication behavior, and file-backed restart recovery. Existing API, ledger, lifecycle, migration, and multi-feeder tests remain in place.
 
 ## Frontend connection
 
 The existing pages use `js/api-client.js` and `js/event-engine.js` to call this service at the URL configured by `CONFIG.apiBaseUrl`. The website submission now calls `/api/development/website-contributions`; no visual or journey changes were made. Feed requests, Event IDs, queue totals, queue positions, wait estimates, lifecycle states, queue entries, archive entries, and development reset all come from the server. The supporter page tracks its resulting Event through targeted REST reads, and both pages receive real-time state changes through the lifecycle event stream with polling as a fallback.
 
-The browser no longer owns or simulates a feed queue or countdown. The website's payment display and behaviour remain simulated, and the server-side WEBSITE verification used in development is not a real payment check. Countdown and archive delays remain server-side simulations. Bell and dispensing are durable simulated Device Commands. Stripe, YouTube, TikTok, Facebook, real hardware, authentication, supporter identity across page reloads, multi-process worker leasing, database backup automation, and production provider approval rules are not implemented.
+The browser no longer owns or simulates a feed queue or countdown. The public website uses supporter-safe APIs; the admin page loads full queue and archive information only after its configured development identity is accepted. The website's payment display and behaviour remain simulated, and the server-side WEBSITE verification used in development is not a real payment check. Countdown and archive delays remain server-side simulations. Bell and dispensing are durable simulated Device Commands. Stripe, YouTube, TikTok, Facebook, real hardware, a managed identity provider, production sessions, dual approval, emergency stop, manual unknown-outcome resolution, supporter identity across page reloads, multi-process worker leasing, database backup automation, and production provider approval rules are not implemented.
 
 ## Development Summary
 
-Phase 1 established the server boundary, Phases 2–5 connected the website and made lifecycle state durable, and Phase 6 added stable resources, independent feeder queues, the Contribution Ledger, FeedIntents, and its Outbox. Phase 7A adds the durable Device Command boundary between lifecycle intent and any future hardware transport. Commands and acknowledgements recover across restart, one Event action maps to one immutable command ID, simulated executions remain exactly once per command ID, and successful acknowledgement is required before lifecycle advancement. Current APIs and frontend files remain unchanged. A real hardware transport, operator resolution for unknown outcomes, authentication, PostgreSQL, multi-instance worker leasing, and operational backup/recovery remain future work.
+Phase 1 established the server boundary, Phases 2–5 connected the website and made lifecycle state durable, and Phase 6 added stable resources, independent feeder queues, the Contribution Ledger, FeedIntents, and its Outbox. Phase 7A added the durable Device Command boundary. Phase 7B-1 adds a provider-neutral authentication boundary, persisted Administrators, role and Barn-scope authorization, protected operator APIs, durable pause/maintenance controls, public data minimization, and immutable operator audit history without storing passwords or connecting a real identity provider. A managed OpenID Connect provider, controller certificates and transport, dual approval, emergency stop, operator resolution for unknown outcomes, PostgreSQL, multi-instance worker leasing, and operational backup/recovery remain future work.

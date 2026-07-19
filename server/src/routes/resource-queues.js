@@ -2,6 +2,10 @@ import { Router } from "express";
 
 import { ApplicationError } from "../errors/application-error.js";
 import { requireDevelopmentContributionSimulation } from "./development-contributions.js";
+import {
+    presentPublicFeedRequest,
+    presentPublicQueueStatistics
+} from "./public-api-presenters.js";
 
 export function createResourceQueuesRouter({
     eventEngine,
@@ -12,7 +16,9 @@ export function createResourceQueuesRouter({
 
     router.get("/", (req, res) => {
         res.status(200).json({
-            feeders: eventEngine.getAllQueueStatistics(),
+            feeders: eventEngine.getAllQueueStatistics().map(
+                presentPublicQueueStatistics
+            ),
             requestId: req.requestId
         });
     });
@@ -22,9 +28,15 @@ export function createResourceQueuesRouter({
             const { feederId } = req.params;
             res.status(200).json({
                 feederId,
-                feedRequests: eventEngine.getQueueSummary(feederId),
-                archivedFeedRequests: eventEngine.getArchivedSummary(feederId),
-                queueStatistics: eventEngine.getQueueStatistics(feederId),
+                feedRequests: eventEngine.getQueueSummary(feederId).map(
+                    presentPublicFeedRequest
+                ),
+                archivedFeedRequests: eventEngine.getArchivedSummary(feederId).map(
+                    presentPublicFeedRequest
+                ),
+                queueStatistics: presentPublicQueueStatistics(
+                    eventEngine.getQueueStatistics(feederId)
+                ),
                 requestId: req.requestId
             });
         } catch (error) {
@@ -48,12 +60,12 @@ export function createResourceQueuesRouter({
                 accepted: true,
                 simulated: true,
                 duplicate: result.duplicate,
-                providerEvent: result.providerEvent,
-                contribution: result.contribution,
-                feedRequest: result.feedRequest,
+                feedRequest: presentPublicFeedRequest(result.feedRequest),
                 queuePosition: result.queuePosition,
                 estimatedWaitMs: result.estimatedWaitMs,
-                queueStatistics: eventEngine.getQueueStatistics(req.params.feederId),
+                queueStatistics: presentPublicQueueStatistics(
+                    eventEngine.getQueueStatistics(req.params.feederId)
+                ),
                 requestId: req.requestId
             });
         } catch (error) {
@@ -74,7 +86,7 @@ export function createResourceQueuesRouter({
             }
 
             res.status(200).json({
-                feedRequest,
+                feedRequest: presentPublicFeedRequest(feedRequest),
                 requestId: req.requestId
             });
         } catch (error) {

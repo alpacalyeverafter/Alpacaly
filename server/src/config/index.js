@@ -112,6 +112,12 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
                 true,
                 "ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION"
             ),
+        enableDevelopmentAuthentication: nodeEnv !== "production"
+            && parseBoolean(
+                env.ENABLE_DEVELOPMENT_AUTHENTICATION,
+                DEFAULTS.enableDevelopmentAuthentication,
+                "ENABLE_DEVELOPMENT_AUTHENTICATION"
+            ),
         outboxPollIntervalMs: parseInteger(
             env.OUTBOX_POLL_INTERVAL_MS,
             DEFAULTS.outboxPollIntervalMs,

@@ -631,6 +631,11 @@ export class SqliteEventStore {
                     createdAt
                 FROM Queues
                 WHERE feederId = ?
+            `),
+            selectFeederOperationalStatus: this.database.prepare(`
+                SELECT operationalStatus, operationalReason, operationalUpdatedAt
+                FROM Feeders
+                WHERE feederId = ?
             `)
         };
     }
@@ -733,6 +738,12 @@ export class SqliteEventStore {
         this.assertOpen();
         const queue = this.statements.selectQueueByFeeder.get(feederId);
         return queue ? { ...queue } : null;
+    }
+
+    getFeederOperationalStatus(feederId) {
+        this.assertOpen();
+        const row = this.statements.selectFeederOperationalStatus.get(feederId);
+        return row ? { ...row } : null;
     }
 
     createProviderEvent(providerEvent, auditRecord) {

@@ -1,6 +1,11 @@
 import { Router } from "express";
 
 import { ApplicationError } from "../errors/application-error.js";
+import {
+    presentPublicEventEngineSnapshot,
+    presentPublicFeedRequest,
+    presentPublicQueueStatistics
+} from "./public-api-presenters.js";
 
 export function requireDevelopmentContributionSimulation(config) {
     if (
@@ -40,13 +45,13 @@ export function createDevelopmentContributionsRouter({
                 accepted: true,
                 simulated: true,
                 duplicate: result.duplicate,
-                providerEvent: result.providerEvent,
-                contribution: result.contribution,
-                feedRequest: result.feedRequest,
+                feedRequest: presentPublicFeedRequest(result.feedRequest),
                 queuePosition: result.queuePosition,
                 estimatedWaitMs: result.estimatedWaitMs,
-                eventEngine: eventEngine.getSnapshot(),
-                queueStatistics: eventEngine.getQueueStatistics(feederId),
+                eventEngine: presentPublicEventEngineSnapshot(eventEngine.getSnapshot()),
+                queueStatistics: presentPublicQueueStatistics(
+                    eventEngine.getQueueStatistics(feederId)
+                ),
                 requestId: req.requestId
             });
         } catch (error) {

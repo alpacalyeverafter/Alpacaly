@@ -2,6 +2,10 @@ import { Router } from "express";
 
 import { ApplicationError } from "../errors/application-error.js";
 import { requireDevelopmentContributionSimulation } from "./development-contributions.js";
+import {
+    presentPublicEventEngineSnapshot,
+    presentPublicFeedRequest
+} from "./public-api-presenters.js";
 
 export function createFeedRequestsRouter({
     eventEngine,
@@ -12,9 +16,11 @@ export function createFeedRequestsRouter({
 
     router.get("/", (req, res) => {
         res.status(200).json({
-            feedRequests: eventEngine.getQueueSummary(),
-            archivedFeedRequests: eventEngine.getArchivedSummary(),
-            eventEngine: eventEngine.getSnapshot(),
+            feedRequests: eventEngine.getQueueSummary().map(presentPublicFeedRequest),
+            archivedFeedRequests: eventEngine.getArchivedSummary().map(
+                presentPublicFeedRequest
+            ),
+            eventEngine: presentPublicEventEngineSnapshot(eventEngine.getSnapshot()),
             requestId: req.requestId
         });
     });
@@ -30,12 +36,10 @@ export function createFeedRequestsRouter({
                 accepted: true,
                 simulated: true,
                 duplicate: result.duplicate,
-                providerEvent: result.providerEvent,
-                contribution: result.contribution,
-                feedRequest: result.feedRequest,
+                feedRequest: presentPublicFeedRequest(result.feedRequest),
                 queuePosition: result.queuePosition,
                 estimatedWaitMs: result.estimatedWaitMs,
-                eventEngine: eventEngine.getSnapshot(),
+                eventEngine: presentPublicEventEngineSnapshot(eventEngine.getSnapshot()),
                 requestId: req.requestId
             });
         } catch (error) {
@@ -57,7 +61,7 @@ export function createFeedRequestsRouter({
         }
 
         res.status(200).json({
-            feedRequest,
+            feedRequest: presentPublicFeedRequest(feedRequest),
             requestId: req.requestId
         });
     });

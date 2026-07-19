@@ -41,7 +41,9 @@ test("creates the required persistent Event Store tables", t => {
     const engine = createPersistentEngine(temporaryDatabase(t));
 
     assert.deepEqual(engine.eventStore.getTableNames(), [
+        "Administrators",
         "AuditRecords",
+        "BarnScopes",
         "Barns",
         "Cameras",
         "Contributions",
@@ -58,14 +60,17 @@ test("creates the required persistent Event Store tables", t => {
         "Feeders",
         "HardwareAcknowledgements",
         "LifecycleHistory",
+        "OperatorAuditRecords",
         "Outbox",
         "ProviderEvents",
         "Queue",
         "Queues",
+        "RoleAssignments",
         "SimulatedDeviceExecutions",
-        "SimulatedDeviceFences"
+        "SimulatedDeviceFences",
+        "WelfareNotes"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 5);
+    assert.equal(engine.eventStore.getSchemaVersion(), 6);
 
     engine.close();
 });

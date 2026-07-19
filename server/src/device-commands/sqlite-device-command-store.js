@@ -93,6 +93,11 @@ export class SqliteDeviceCommandStore {
                 FROM DeviceCommands
                 WHERE eventId = ? AND commandType = ?
             `),
+            selectDeviceOperationalStatus: this.database.prepare(`
+                SELECT operationalStatus, operationalReason, operationalUpdatedAt
+                FROM Devices
+                WHERE deviceId = ?
+            `),
             selectMaximumFencingToken: this.database.prepare(`
                 SELECT COALESCE(MAX(fencingToken), 0) AS maximumToken
                 FROM DeviceCommands
@@ -173,8 +178,11 @@ export class SqliteDeviceCommandStore {
                 FROM DeviceCommands AS command
                 JOIN DeviceCommandOutbox AS outbox
                   ON outbox.commandId = command.commandId
+                JOIN Devices AS device
+                  ON device.deviceId = command.deviceId
                 WHERE command.status IN ('PENDING', 'READY', 'RETRY_SCHEDULED')
                   AND outbox.status = 'PENDING'
+                  AND device.operationalStatus = 'AVAILABLE'
                   AND (command.nextAttemptAt IS NULL OR command.nextAttemptAt <= ?)
                   AND outbox.availableAt <= ?
                   AND NOT EXISTS (
@@ -411,6 +419,12 @@ export class SqliteDeviceCommandStore {
         return mapCommand(
             this.statements.selectCommandByEventAction.get(eventId, commandType)
         );
+    }
+
+    getDeviceOperationalStatus(deviceId) {
+        this.eventStore.assertOpen();
+        const row = this.statements.selectDeviceOperationalStatus.get(deviceId);
+        return row ? { ...row } : null;
     }
 
     getCommandsForEvent(eventId) {

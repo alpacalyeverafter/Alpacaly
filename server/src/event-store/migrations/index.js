@@ -6,15 +6,19 @@ import {
 import { migration003ContributionLedger } from "./003-contribution-ledger.js";
 import { migration004DurableFeedIntentOutbox } from "./004-durable-feed-intent-outbox.js";
 import { migration005DurableDeviceCommands } from "./005-durable-device-commands.js";
+import {
+    migration006AdministratorSecurityFoundation
+} from "./006-administrator-security-foundation.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 5;
+export const EVENT_STORE_SCHEMA_VERSION = 6;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
     migration002ResourceModel,
     migration003ContributionLedger,
     migration004DurableFeedIntentOutbox,
-    migration005DurableDeviceCommands
+    migration005DurableDeviceCommands,
+    migration006AdministratorSecurityFoundation
 ]);
 
 function readUserVersion(database) {

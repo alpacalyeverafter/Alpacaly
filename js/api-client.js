@@ -26,6 +26,7 @@
         constructor({
             baseUrl = "",
             timeoutMs = 5000,
+            developmentAdministratorIdentity = null,
             fetchImpl = global.fetch ? global.fetch.bind(global) : null,
             eventSourceFactory = global.EventSource
                 ? url => new global.EventSource(url)
@@ -33,6 +34,10 @@
         } = {}) {
             this.baseUrl = String(baseUrl || "").replace(/\/+$/, "");
             this.timeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : 5000;
+            this.developmentAdministratorIdentity =
+                developmentAdministratorIdentity
+                    ? String(developmentAdministratorIdentity)
+                    : null;
             this.fetchImpl = fetchImpl;
             this.eventSourceFactory = eventSourceFactory;
         }
@@ -63,8 +68,21 @@
         resetEventEngine() {
             return this.request("/api/event-engine/reset", {
                 method: "POST",
-                body: {}
+                body: { reason: "LOCAL_DEVELOPMENT_RESET" },
+                administrator: true
             });
+        }
+
+        getAdministratorSession() {
+            return this.request("/api/admin/session", { administrator: true });
+        }
+
+        listAdministratorFeedRequests(barnId, feederId) {
+            return this.request(
+                `/api/admin/barns/${encodeURIComponent(barnId)}`
+                + `/feeders/${encodeURIComponent(feederId)}/feed-requests`,
+                { administrator: true }
+            );
         }
 
         subscribeToLifecycle({ onEvent, onError } = {}) {
@@ -104,7 +122,11 @@
             return () => eventSource.close();
         }
 
-        async request(path, { method = "GET", body } = {}) {
+        async request(path, {
+            method = "GET",
+            body,
+            administrator = false
+        } = {}) {
             if (typeof this.fetchImpl !== "function") {
                 throw new ApiClientError("This browser cannot connect to the feed service.", {
                     code: "FETCH_UNAVAILABLE"
@@ -120,6 +142,10 @@
 
             if (body !== undefined) {
                 headers["content-type"] = "application/json";
+            }
+            if (administrator && this.developmentAdministratorIdentity) {
+                headers.authorization =
+                    `Development ${this.developmentAdministratorIdentity}`;
             }
 
             let response;
@@ -199,7 +225,9 @@
             const config = global.CONFIG || {};
             global.alpacalyApiClient = new AlpacalyApiClient({
                 baseUrl: config.apiBaseUrl,
-                timeoutMs: config.apiRequestTimeoutMs
+                timeoutMs: config.apiRequestTimeoutMs,
+                developmentAdministratorIdentity:
+                    config.developmentAdministratorIdentity
             });
         }
     }

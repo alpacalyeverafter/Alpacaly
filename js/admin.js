@@ -7,6 +7,7 @@
     "use strict";
 
     const eventEngine = window.alpacalyEventEngine;
+    const apiClient = window.alpacalyApiClient;
     const PAYMENT_STORAGE_KEY = "alpacaly-payment-gateway";
     const stateElements = {
         totalFeedsToday: document.getElementById("total-feeds-today"),
@@ -20,7 +21,7 @@
     const feedingNowElement = document.getElementById("feeding-now");
     const waitingQueueList = document.getElementById("waiting-queue-list");
 
-    if (!eventEngine) {
+    if (!eventEngine || !apiClient) {
         console.error("[Admin] Feed service modules were not loaded.");
         return;
     }
@@ -28,6 +29,7 @@
     let queueRefreshInFlight = false;
     let queueRefreshPending = false;
     let activeEventId = null;
+    let administratorAuthenticated = false;
 
     function formatCurrency(value) {
         return `£${Number(value || 0).toFixed(2)}`;
@@ -194,13 +196,34 @@
     }
 
     async function refreshQueue() {
+        if (!administratorAuthenticated) {
+            renderWaitingQueue([], "Administrator authentication is required.");
+            return;
+        }
         if (queueRefreshInFlight) {
             queueRefreshPending = true;
             return;
         }
 
         queueRefreshInFlight = true;
-        const result = await eventEngine.getQueue();
+        let result;
+        try {
+            const response = await apiClient.listAdministratorFeedRequests(
+                CONFIG.defaultBarnId,
+                CONFIG.defaultFeederId
+            );
+            result = {
+                success: true,
+                feedRequests: response.feedRequests || [],
+                archivedFeedRequests: response.archivedFeedRequests || [],
+                queueStatistics: response.queueStatistics || null
+            };
+        } catch (error) {
+            result = {
+                success: false,
+                message: error.message || "Administrator access is unavailable."
+            };
+        }
         queueRefreshInFlight = false;
 
         if (!result.success) {
@@ -210,6 +233,13 @@
 
         renderWaitingQueue(result.feedRequests);
         renderHistory(result.archivedFeedRequests);
+        if (result.queueStatistics?.activeEvent) {
+            renderFeedingNow({
+                backendAvailable: true,
+                currentEvent: result.queueStatistics.activeEvent,
+                status: result.queueStatistics.activeEvent.state
+            });
+        }
 
         if (queueRefreshPending) {
             queueRefreshPending = false;
@@ -236,8 +266,25 @@
         }
     }
 
-    eventEngine.subscribe(renderState);
+    async function initializeAdministrator() {
+        try {
+            await apiClient.getAdministratorSession();
+            administratorAuthenticated = true;
+            eventEngine.subscribe(renderState);
+            renderState(eventEngine.getState());
+        } catch (error) {
+            administratorAuthenticated = false;
+            stateElements.serverStatus.textContent = "Authentication required";
+            renderFeedingNow({
+                backendAvailable: false,
+                message: "Administrator authentication is required."
+            });
+            renderWaitingQueue([], "Administrator authentication is required.");
+        }
+    }
+
     renderPayments();
     renderHistory([]);
     window.setInterval(renderPayments, 1000);
+    void initializeAdministrator();
 })();

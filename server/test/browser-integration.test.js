@@ -36,6 +36,56 @@ test("browser API client submits feed requests to the configured backend", async
     );
     assert.equal(capturedRequest.options.method, "POST");
     assert.deepEqual(JSON.parse(capturedRequest.options.body), { supporterName: "Ada" });
+    assert.equal(capturedRequest.options.headers.authorization, undefined);
+});
+
+test("browser API client sends only the configured development identity to admin APIs", async () => {
+    const capturedRequests = [];
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        developmentAdministratorIdentity: "local-admin",
+        fetchImpl: async (url, options) => {
+            capturedRequests.push({ url, options });
+            return jsonResponse({ administrator: {}, feedRequests: [] });
+        }
+    });
+
+    await client.getAdministratorSession();
+    await client.listAdministratorFeedRequests("barn-default", "feeder-default");
+    await client.getEventEngineStatus();
+
+    assert.equal(
+        capturedRequests[0].options.headers.authorization,
+        "Development local-admin"
+    );
+    assert.equal(
+        capturedRequests[1].options.headers.authorization,
+        "Development local-admin"
+    );
+    assert.equal(capturedRequests[2].options.headers.authorization, undefined);
+});
+
+test("browser API client cannot authenticate admin calls without a configured identity", async () => {
+    let capturedAuthorization = "not-called";
+    const client = new AlpacalyApiClient({
+        fetchImpl: async (_url, options) => {
+            capturedAuthorization = options.headers.authorization;
+            return jsonResponse({
+                error: {
+                    code: "ADMINISTRATOR_AUTHENTICATION_REQUIRED",
+                    message: "Administrator authentication is required."
+                }
+            }, 401);
+        }
+    });
+
+    await assert.rejects(
+        () => client.getAdministratorSession(),
+        error => error instanceof ApiClientError
+            && error.code === "ADMINISTRATOR_AUTHENTICATION_REQUIRED"
+            && error.statusCode === 401
+    );
+    assert.equal(capturedAuthorization, undefined);
 });
 
 test("browser API client preserves structured backend errors", async () => {

@@ -111,6 +111,12 @@ export class DeviceCommandWorker {
         if (!["READY", "RETRY_SCHEDULED"].includes(command.status)) {
             return command;
         }
+        if (
+            this.deviceCommandStore.getDeviceOperationalStatus(command.deviceId)
+                ?.operationalStatus !== "AVAILABLE"
+        ) {
+            return command;
+        }
         const nextAttempt = Date.parse(command.nextAttemptAt);
         if (Number.isFinite(nextAttempt) && nextAttempt > this.clock().getTime()) {
             return command;

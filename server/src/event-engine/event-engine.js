@@ -323,9 +323,7 @@ export class EventEngine {
             barnId: queueRuntime.barnId,
             feederId: queueRuntime.feederId,
             queueId: queueRuntime.queueId,
-            feederStatus: activeEvent
-                ? activeEvent.state
-                : queueRuntime.eventIds.length > 0 ? "QUEUED" : "READY",
+            feederStatus: this.getFeederDisplayStatus(queueRuntime, activeEvent),
             waitingCount: Math.max(
                 0,
                 queueRuntime.eventIds.length - (activeEvent ? 1 : 0)
@@ -480,9 +478,7 @@ export class EventEngine {
             : null;
 
         return {
-            status: activeEvent
-                ? activeEvent.state
-                : queueRuntime.eventIds.length > 0 ? "QUEUED" : "READY",
+            status: this.getFeederDisplayStatus(queueRuntime, activeEvent),
             date: this.currentDateKey,
             queueSize: queueRuntime.eventIds.length,
             waitingQueueSize: Math.max(
@@ -507,6 +503,9 @@ export class EventEngine {
         if (queueRuntime.processing) {
             return this.waitForIdle();
         }
+        if (!this.isFeederProcessingAvailable(feederId)) {
+            return;
+        }
 
         queueRuntime.processing = true;
         const generation = this.lifecycleGeneration;
@@ -516,6 +515,9 @@ export class EventEngine {
                 queueRuntime.eventIds.length > 0
                 && generation === this.lifecycleGeneration
             ) {
+                if (!this.isFeederProcessingAvailable(feederId)) {
+                    break;
+                }
                 const eventId = queueRuntime.eventIds[0];
                 const feedRequest = this.feedRequests.get(eventId);
 
@@ -1077,6 +1079,7 @@ export class EventEngine {
             queueRuntime.eventIds.length === 0
             || queueRuntime.processing
             || queueRuntime.processingScheduled
+            || !this.isFeederProcessingAvailable(feederId)
         ) {
             return;
         }
@@ -1099,6 +1102,23 @@ export class EventEngine {
         }
         this.idleResolvers.forEach(resolve => resolve());
         this.idleResolvers.clear();
+    }
+
+    isFeederProcessingAvailable(feederId) {
+        return this.eventStore.getFeederOperationalStatus(feederId)
+            ?.operationalStatus === "AVAILABLE";
+    }
+
+    getFeederDisplayStatus(queueRuntime, activeEvent) {
+        const operational = this.eventStore.getFeederOperationalStatus(
+            queueRuntime.feederId
+        );
+        if (operational && operational.operationalStatus !== "AVAILABLE") {
+            return operational.operationalStatus;
+        }
+        return activeEvent
+            ? activeEvent.state
+            : queueRuntime.eventIds.length > 0 ? "QUEUED" : "READY";
     }
 
     resolveShutdownWaiters() {

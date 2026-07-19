@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 
+import { createAdministratorSecurityServices } from "./administrator-security/index.js";
 import { loadConfig } from "./config/index.js";
 import { createContributionLedgerServices } from "./contribution-ledger/index.js";
 import { createDeviceCommandServices } from "./device-commands/index.js";
@@ -8,6 +9,8 @@ import { EventEngine } from "./event-engine/event-engine.js";
 import { createLogger } from "./logging/logger.js";
 import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { requestLogger } from "./middleware/request-logger.js";
+import { authenticateAdministrator } from "./middleware/administrator-security.js";
+import { createAdministratorRouter } from "./routes/administrator.js";
 import { createEventEngineRouter } from "./routes/event-engine.js";
 import { createDevelopmentContributionsRouter } from "./routes/development-contributions.js";
 import { createFeedRequestsRouter } from "./routes/feed-requests.js";
@@ -35,6 +38,13 @@ export function createApp(options = {}) {
             outboxPollIntervalMs: config.outboxPollIntervalMs,
             outboxRetryDelayMs: config.outboxRetryDelayMs
         });
+    const administratorSecurityServices = options.administratorSecurityServices
+        || createAdministratorSecurityServices({
+            eventEngine,
+            deviceCommandServices,
+            config,
+            clock: eventEngine.clock
+        });
     const app = express();
 
     app.disable("x-powered-by");
@@ -43,11 +53,12 @@ export function createApp(options = {}) {
     app.locals.eventEngine = eventEngine;
     app.locals.deviceCommandServices = deviceCommandServices;
     app.locals.contributionLedgerServices = contributionLedgerServices;
+    app.locals.administratorSecurityServices = administratorSecurityServices;
 
     app.use(cors({
         origin: config.corsOrigin,
         methods: ["GET", "POST", "OPTIONS"],
-        allowedHeaders: ["content-type", "x-request-id"],
+        allowedHeaders: ["content-type", "x-request-id", "authorization"],
         exposedHeaders: ["x-request-id"]
     }));
     app.use(requestLogger(logger));
@@ -72,7 +83,20 @@ export function createApp(options = {}) {
         developmentWebsiteContributionService:
             contributionLedgerServices.developmentWebsiteContributionService
     }));
-    app.use("/api/event-engine", createEventEngineRouter({ eventEngine, config }));
+    app.use("/api/admin", authenticateAdministrator(
+        administratorSecurityServices.authenticationService
+    ));
+    app.use("/api/admin", createAdministratorRouter({
+        eventEngine,
+        config,
+        administratorSecurityServices,
+        deviceCommandServices
+    }));
+    app.use("/api/event-engine", createEventEngineRouter({
+        eventEngine,
+        config,
+        administratorSecurityServices
+    }));
 
     app.use(notFoundHandler);
     app.use(createErrorHandler(logger));

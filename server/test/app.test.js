@@ -9,6 +9,9 @@ import { DEFAULT_RESOURCE_IDS } from "../src/domain/resources.js";
 import { EventEngine } from "../src/event-engine/event-engine.js";
 import { createTestLogger, testConfig } from "./helpers.js";
 
+const ADMIN_AUTHORIZATION = "Development local-admin";
+const VIEWER_AUTHORIZATION = "Development local-viewer";
+
 function createTestApp(overrides = {}) {
     const logger = createTestLogger();
     const config = { ...testConfig, ...overrides.config };
@@ -74,21 +77,27 @@ test("POST /api/feed-requests accepts and queues a valid request", async () => {
 
     assert.equal(response.body.accepted, true);
     assert.equal(response.body.simulated, true);
-    assert.equal(response.body.providerEvent.provider, "WEBSITE");
-    assert.equal(response.body.providerEvent.verificationStatus, "VERIFIED");
-    assert.equal(response.body.contribution.eligibilityStatus, "ELIGIBLE");
-    assert.equal(
-        response.body.feedRequest.contributionId,
-        response.body.contribution.contributionId
-    );
+    assert.equal(response.body.providerEvent, undefined);
+    assert.equal(response.body.contribution, undefined);
     assert.equal(response.body.feedRequest.id, "feed_api-test-id");
     assert.equal(response.body.feedRequest.eventId, "feed_api-test-id");
     assert.equal(response.body.feedRequest.status, "QUEUED");
     assert.equal(response.body.feedRequest.barnId, DEFAULT_RESOURCE_IDS.barnId);
     assert.equal(response.body.feedRequest.feederId, DEFAULT_RESOURCE_IDS.feederId);
     assert.equal(response.body.feedRequest.queueId, DEFAULT_RESOURCE_IDS.queueId);
+    assert.equal(response.body.feedRequest.timeline, undefined);
+    const persisted = app.locals.eventEngine.getFeedRequest("feed_api-test-id");
+    const contribution = app.locals.eventEngine.eventStore.getContribution(
+        persisted.contributionId
+    );
+    const providerEvent = app.locals.eventEngine.eventStore.getProviderEvent(
+        contribution.providerEventId
+    );
+    assert.equal(providerEvent.provider, "WEBSITE");
+    assert.equal(providerEvent.verificationStatus, "VERIFIED");
+    assert.equal(contribution.eligibilityStatus, "ELIGIBLE");
     assert.deepEqual(
-        response.body.feedRequest.timeline.map(entry => entry.state),
+        persisted.timeline.map(entry => entry.state),
         ["RECEIVED", "VALIDATED", "QUEUED"]
     );
     assert.equal(response.body.queuePosition, 1);
@@ -100,7 +109,8 @@ test("POST /api/feed-requests accepts and queues a valid request", async () => {
 });
 
 test("POST /api/development/website-contributions uses server verification", async () => {
-    const response = await request(createTestApp())
+    const app = createTestApp();
+    const response = await request(app)
         .post("/api/development/website-contributions")
         .send({
             supporterName: "Development supporter",
@@ -111,9 +121,20 @@ test("POST /api/development/website-contributions uses server verification", asy
         .expect(202);
 
     assert.equal(response.body.simulated, true);
-    assert.equal(response.body.providerEvent.provider, "WEBSITE");
-    assert.equal(response.body.contribution.amountMinor, 750);
-    assert.equal(response.body.feedRequest.contributionId, response.body.contribution.contributionId);
+    assert.equal(response.body.providerEvent, undefined);
+    assert.equal(response.body.contribution, undefined);
+    const persisted = app.locals.eventEngine.getFeedRequest(
+        response.body.feedRequest.eventId
+    );
+    const contribution = app.locals.eventEngine.eventStore.getContribution(
+        persisted.contributionId
+    );
+    assert.equal(contribution.amountMinor, 750);
+    assert.equal(
+        app.locals.eventEngine.eventStore
+            .getProviderEvent(contribution.providerEventId).provider,
+        "WEBSITE"
+    );
 });
 
 test("development contribution endpoint rejects client-controlled verification", async () => {
@@ -164,17 +185,27 @@ test("GET /api/feed-requests returns the server queue", async () => {
     assert.equal(response.body.feedRequests.length, 1);
     assert.equal(response.body.feedRequests[0].id, "feed_api-test-id");
     assert.equal(response.body.feedRequests[0].eventId, "feed_api-test-id");
-    assert.equal(response.body.feedRequests[0].supporterName, "Grace");
-    assert.equal(response.body.feedRequests[0].source, "website");
+    assert.equal(response.body.feedRequests[0].supporterName, undefined);
+    assert.equal(response.body.feedRequests[0].source, undefined);
     assert.equal(response.body.feedRequests[0].status, "QUEUED");
     assert.equal(response.body.feedRequests[0].barnId, DEFAULT_RESOURCE_IDS.barnId);
     assert.equal(response.body.feedRequests[0].feederId, DEFAULT_RESOURCE_IDS.feederId);
     assert.equal(response.body.feedRequests[0].queueId, DEFAULT_RESOURCE_IDS.queueId);
     assert.equal(response.body.feedRequests[0].queuePosition, 1);
     assert.equal(response.body.feedRequests[0].estimatedWaitMs, 0);
-    assert.equal(response.body.feedRequests[0].timeline.length, 3);
+    assert.equal(response.body.feedRequests[0].timeline, undefined);
     assert.deepEqual(response.body.archivedFeedRequests, []);
     assert.equal(response.body.eventEngine.queueSize, 1);
+
+    const administratorResponse = await request(app)
+        .get(
+            `/api/admin/barns/${DEFAULT_RESOURCE_IDS.barnId}`
+            + `/feeders/${DEFAULT_RESOURCE_IDS.feederId}/feed-requests`
+        )
+        .set("authorization", VIEWER_AUTHORIZATION)
+        .expect(200);
+    assert.equal(administratorResponse.body.feedRequests[0].supporterName, "Grace");
+    assert.equal(administratorResponse.body.feedRequests[0].timeline.length, 3);
 });
 
 test("GET /api/feed-requests/:id returns an accepted request", async () => {
@@ -182,11 +213,21 @@ test("GET /api/feed-requests/:id returns an accepted request", async () => {
     await request(app).post("/api/feed-requests").send({ supporterName: "Grace" }).expect(202);
 
     const response = await request(app).get("/api/feed-requests/feed_api-test-id").expect(200);
-    assert.equal(response.body.feedRequest.supporterName, "Grace");
+    assert.equal(response.body.feedRequest.supporterName, undefined);
     assert.equal(response.body.feedRequest.queuePosition, 1);
     assert.equal(response.body.feedRequest.estimatedWaitMs, 0);
+    assert.equal(response.body.feedRequest.timeline, undefined);
+
+    const administratorResponse = await request(app)
+        .get(
+            `/api/admin/barns/${DEFAULT_RESOURCE_IDS.barnId}`
+            + `/feeders/${DEFAULT_RESOURCE_IDS.feederId}/feed-requests`
+        )
+        .set("authorization", VIEWER_AUTHORIZATION)
+        .expect(200);
+    assert.equal(administratorResponse.body.feedRequests[0].supporterName, "Grace");
     assert.deepEqual(
-        response.body.feedRequest.timeline.map(entry => entry.state),
+        administratorResponse.body.feedRequests[0].timeline.map(entry => entry.state),
         ["RECEIVED", "VALIDATED", "QUEUED"]
     );
 });
@@ -201,10 +242,23 @@ test("feed request API exposes the complete archived lifecycle", async () => {
     await app.locals.eventEngine.waitForIdle();
 
     const eventId = created.body.feedRequest.eventId;
-    const detail = await request(app).get(`/api/feed-requests/${eventId}`).expect(200);
-    assert.equal(detail.body.feedRequest.state, "ARCHIVED");
+    const publicDetail = await request(app)
+        .get(`/api/feed-requests/${eventId}`)
+        .expect(200);
+    assert.equal(publicDetail.body.feedRequest.timeline, undefined);
+    const detail = await request(app)
+        .get(
+            `/api/admin/barns/${DEFAULT_RESOURCE_IDS.barnId}`
+            + `/feeders/${DEFAULT_RESOURCE_IDS.feederId}/feed-requests`
+        )
+        .set("authorization", VIEWER_AUTHORIZATION)
+        .expect(200);
+    const archived = detail.body.archivedFeedRequests.find(
+        feedRequest => feedRequest.eventId === eventId
+    );
+    assert.equal(archived.state, "ARCHIVED");
     assert.deepEqual(
-        detail.body.feedRequest.timeline.map(entry => entry.state),
+        archived.timeline.map(entry => entry.state),
         [
             "RECEIVED",
             "VALIDATED",
@@ -265,7 +319,11 @@ test("POST /api/event-engine/reset clears development queue state", async () => 
     const app = createTestApp();
     await request(app).post("/api/feed-requests").send({ supporterName: "Grace" }).expect(202);
 
-    const response = await request(app).post("/api/event-engine/reset").send({}).expect(200);
+    const response = await request(app)
+        .post("/api/event-engine/reset")
+        .set("authorization", ADMIN_AUTHORIZATION)
+        .send({ reason: "API test reset" })
+        .expect(200);
     assert.equal(response.body.reset, true);
     assert.equal(response.body.eventEngine.queueSize, 0);
     assert.equal(response.body.eventEngine.acceptedToday, 0);
@@ -273,7 +331,11 @@ test("POST /api/event-engine/reset clears development queue state", async () => 
 
 test("POST /api/event-engine/reset is disabled by production configuration", async () => {
     const app = createTestApp({ config: { enableDemoReset: false } });
-    const response = await request(app).post("/api/event-engine/reset").send({}).expect(403);
+    const response = await request(app)
+        .post("/api/event-engine/reset")
+        .set("authorization", ADMIN_AUTHORIZATION)
+        .send({ reason: "Disabled reset test" })
+        .expect(403);
 
     assert.equal(response.body.error.code, "DEMO_RESET_DISABLED");
 });

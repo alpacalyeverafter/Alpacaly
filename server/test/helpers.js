@@ -17,6 +17,7 @@ export const testConfig = Object.freeze({
     databasePath: ":memory:",
     enableDemoReset: true,
     enableDevelopmentContributionSimulation: true,
+    enableDevelopmentAuthentication: true,
     outboxPollIntervalMs: 250,
     outboxRetryDelayMs: 0,
     deviceCommandPollIntervalMs: 10,
