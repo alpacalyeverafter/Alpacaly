@@ -7,6 +7,7 @@ import test from "node:test";
 import { EventEngine } from "../src/event-engine/event-engine.js";
 import {
     createTestLogger,
+    getTestDeviceCommandServices,
     submitTestFeedRequest,
     testConfig
 } from "./helpers.js";
@@ -24,7 +25,7 @@ function createPersistentEngine(databasePath, overrides = {}) {
         ...overrides.config
     };
 
-    return new EventEngine({
+    const engine = new EventEngine({
         config,
         logger: createTestLogger(),
         clock: overrides.clock || (() => new Date(2026, 6, 19, 12, 0, 0)),
@@ -32,6 +33,8 @@ function createPersistentEngine(databasePath, overrides = {}) {
         sleep: overrides.sleep || (async () => {}),
         autoProcess: overrides.autoProcess ?? false
     });
+    getTestDeviceCommandServices(engine);
+    return engine;
 }
 
 test("creates the required persistent Event Store tables", t => {
@@ -42,19 +45,27 @@ test("creates the required persistent Event Store tables", t => {
         "Barns",
         "Cameras",
         "Contributions",
+        "DeviceAcknowledgements",
+        "DeviceCommandAuditRecords",
+        "DeviceCommandHistory",
+        "DeviceCommandOutbox",
+        "DeviceCommands",
         "Devices",
         "Events",
         "FeedIntentHistory",
         "FeedIntents",
+        "FeederDeviceAssignments",
         "Feeders",
         "HardwareAcknowledgements",
         "LifecycleHistory",
         "Outbox",
         "ProviderEvents",
         "Queue",
-        "Queues"
+        "Queues",
+        "SimulatedDeviceExecutions",
+        "SimulatedDeviceFences"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 4);
+    assert.equal(engine.eventStore.getSchemaVersion(), 5);
 
     engine.close();
 });

@@ -81,6 +81,7 @@ export class EventEngine {
             logger
         });
         this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
+        this.deviceCommandService = null;
 
         this.feedRequests = new Map();
         this.queueRuntimes = new FeederQueueManager(
@@ -351,6 +352,10 @@ export class EventEngine {
         return this.defaultResourceAssignment.feederId;
     }
 
+    setDeviceCommandService(deviceCommandService) {
+        this.deviceCommandService = deviceCommandService;
+    }
+
     subscribe(listener) {
         if (typeof listener !== "function") {
             return () => {};
@@ -400,8 +405,43 @@ export class EventEngine {
         return clone(entry);
     }
 
+    applyPersistedDeviceAcknowledgement(eventId, stage, acknowledgement) {
+        const feedRequest = this.feedRequests.get(eventId);
+        if (!feedRequest) {
+            return null;
+        }
+        const entry = {
+            stage,
+            status: acknowledgement.status,
+            receivedAt: acknowledgement.receivedAt,
+            details: acknowledgement.details || null
+        };
+        const commandId = entry.details?.commandId;
+        if (
+            commandId
+            && feedRequest.acknowledgementHistory.some(item => (
+                item.details?.commandId === commandId
+            ))
+        ) {
+            return clone(entry);
+        }
+        feedRequest.hardwareAcknowledgements[stage] = entry;
+        feedRequest.acknowledgementHistory.push(entry);
+        feedRequest.updatedAt = entry.receivedAt;
+        this.lastUpdatedAt = entry.receivedAt;
+        this.emit({
+            type: "HARDWARE_ACKNOWLEDGED",
+            eventId,
+            acknowledgement: clone(entry),
+            feedRequest: this.summarizeFeedRequest(feedRequest),
+            eventEngine: this.getSnapshot()
+        });
+        return clone(entry);
+    }
+
     reset() {
         const clearedRequests = this.feedRequests.size;
+        this.deviceCommandService?.prepareForReset();
         this.eventStore.clearAll();
         this.lifecycleAbortController.abort();
         this.lifecycleAbortController = new AbortController();
@@ -581,43 +621,49 @@ export class EventEngine {
             }
 
             this.transitionTo(feedRequest, "BELL", {
-                mode: "SIMULATED",
+                mode: "SIMULATED_DEVICE_COMMAND",
+                commandType: "RING_BELL",
                 hardwareAcknowledgement: {
                     supported: true,
-                    required: false,
-                    status: "NOT_REQUIRED"
+                    required: true,
+                    status: "PENDING"
                 },
                 durationMs: this.config.lifecycleBellMs
             });
         }
 
         if (feedRequest.state === "BELL") {
-            if (!await this.waitForStage(
+            if (!this.deviceCommandService) {
+                throw new ApplicationError("Device Command service is unavailable.", {
+                    code: "DEVICE_COMMAND_SERVICE_UNAVAILABLE",
+                    statusCode: 503
+                });
+            }
+            if (!await this.deviceCommandService.executeEventAction(
                 feedRequest,
-                "BELL",
-                this.config.lifecycleBellMs,
-                generation
+                "RING_BELL",
+                { signal: this.lifecycleAbortController.signal }
             )) {
                 return false;
             }
 
             this.transitionTo(feedRequest, "DISPENSING", {
-                mode: "SIMULATED",
+                mode: "SIMULATED_DEVICE_COMMAND",
+                commandType: "DISPENSE_FEED",
                 hardwareAcknowledgement: {
                     supported: true,
-                    required: false,
-                    status: "NOT_REQUIRED"
+                    required: true,
+                    status: "PENDING"
                 },
                 durationMs: this.config.lifecycleDispensingMs
             });
         }
 
         if (feedRequest.state === "DISPENSING") {
-            if (!await this.waitForStage(
+            if (!await this.deviceCommandService.executeEventAction(
                 feedRequest,
-                "DISPENSING",
-                this.config.lifecycleDispensingMs,
-                generation
+                "DISPENSE_FEED",
+                { signal: this.lifecycleAbortController.signal }
             )) {
                 return false;
             }
@@ -626,7 +672,8 @@ export class EventEngine {
             queueRuntime.completedToday += 1;
             try {
                 this.transitionTo(feedRequest, "COMPLETE", {
-                    mode: "SIMULATED_LIFECYCLE"
+                    mode: "DEVICE_ACKNOWLEDGED",
+                    commandType: "DISPENSE_FEED"
                 });
             } catch (error) {
                 queueRuntime.completedToday -= 1;

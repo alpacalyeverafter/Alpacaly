@@ -1316,6 +1316,13 @@ export class SqliteEventStore {
     clearAll() {
         this.transaction(() => {
             this.database.exec(`
+                DELETE FROM DeviceAcknowledgements;
+                DELETE FROM SimulatedDeviceExecutions;
+                DELETE FROM SimulatedDeviceFences;
+                DELETE FROM DeviceCommandAuditRecords;
+                DELETE FROM DeviceCommandHistory;
+                DELETE FROM DeviceCommandOutbox;
+                DELETE FROM DeviceCommands;
                 DELETE FROM AuditRecords;
                 DELETE FROM Events;
                 DELETE FROM FeedIntentHistory;

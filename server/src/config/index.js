@@ -124,6 +124,30 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             "OUTBOX_RETRY_DELAY_MS",
             { minimum: 0 }
         ),
+        deviceCommandPollIntervalMs: parseInteger(
+            env.DEVICE_COMMAND_POLL_INTERVAL_MS,
+            DEFAULTS.deviceCommandPollIntervalMs,
+            "DEVICE_COMMAND_POLL_INTERVAL_MS",
+            { minimum: 10 }
+        ),
+        deviceCommandRetryDelayMs: parseInteger(
+            env.DEVICE_COMMAND_RETRY_DELAY_MS,
+            DEFAULTS.deviceCommandRetryDelayMs,
+            "DEVICE_COMMAND_RETRY_DELAY_MS",
+            { minimum: 0 }
+        ),
+        deviceCommandMaximumAttempts: parseInteger(
+            env.DEVICE_COMMAND_MAXIMUM_ATTEMPTS,
+            DEFAULTS.deviceCommandMaximumAttempts,
+            "DEVICE_COMMAND_MAXIMUM_ATTEMPTS",
+            { minimum: 1, maximum: 100 }
+        ),
+        deviceAcknowledgementTimeoutMs: parseInteger(
+            env.DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS,
+            DEFAULTS.deviceAcknowledgementTimeoutMs,
+            "DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS",
+            { minimum: 0 }
+        ),
         lifecycleCountdownMs: parseInteger(
             env.LIFECYCLE_COUNTDOWN_MS,
             DEFAULTS.lifecycleCountdownMs,

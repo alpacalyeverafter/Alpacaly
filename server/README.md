@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 6D backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, Outbox work, recovery history, and lifecycle state in SQLite, applies welfare rules through the Event Engine, runs resource-isolated feeder queues, and broadcasts live lifecycle changes.
+This directory contains the Phase 7A backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
 
-## Phase 6D boundaries
+## Phase 7A boundaries
 
 Included:
 
@@ -24,6 +24,12 @@ Included:
 - One immutable FeedIntent and one durable Outbox entry per eligible Contribution
 - Automatic Outbox reconciliation, retry, clean shutdown, and restart recovery
 - Database-enforced one-to-one FeedIntent-to-Event processing
+- Durable `RING_BELL` and `DISPENSE_FEED` DeviceCommands with one command per Event action
+- Persistent Device Command Outbox, state history, acknowledgements, and audit records
+- Hardware-neutral `DeviceAdapter` boundary with a simulated adapter only
+- Acknowledgement-gated `BELL` and `DISPENSING` lifecycle advancement
+- Per-feeder command ordering, idempotent command IDs, monotonic fencing tokens, retry, timeout, and unknown-outcome handling
+- Restart-safe simulated device execution memory that prevents duplicate physical simulation
 - Development-only simulated WEBSITE Contribution flow
 - Immutable, server-generated Event IDs
 - Timestamped lifecycle timeline for every accepted request
@@ -46,11 +52,11 @@ Intentionally excluded:
 - Stripe or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
 - Authentication and authorisation
-- Hardware or feeder control
+- Real hardware transports, feeder control, MQTT, GPIO, Raspberry Pi, or ESP32 integration
 - Camera integration or streaming
 - Live-video integration
 
-SQLite is the durable source of truth. ProviderEvent ingestion, Contribution verification, FeedIntent authorisation, feed eligibility, Outbox reconciliation, and Feed Request creation are separate responsibilities. Contribution, FeedIntent, and Outbox insertion share one transaction. Event, initial lifecycle history, FIFO queue insertion, audit record, and Outbox completion share a second transaction. A crash can therefore leave only durable pending work or fully committed queue work. The worker recovers claimed-but-unfinished entries on startup and database uniqueness prevents repeated attempts from creating another Event. The Event Engine still maintains one isolated runtime per feeder, while the original website and read APIs remain scoped to the default feeder.
+SQLite is the durable source of truth. ProviderEvent ingestion, Contribution verification, FeedIntent authorisation, Feed Request creation, lifecycle coordination, Device Command creation, delivery, and acknowledgement handling are separate responsibilities. A crash can leave only durable pending work or a fully committed result. Workers reconcile unfinished FeedIntent and Device Command work on startup. Database uniqueness prevents repeated work from creating another Event or another command for the same Event action. Persistent simulated device execution memory and fencing prevent a replay from performing a command twice or allowing an older command to overtake a newer device token. The Event Engine still maintains one isolated runtime per feeder, while the original website and read APIs remain scoped to the default feeder.
 
 ## Requirements
 
@@ -86,6 +92,10 @@ The default server address is `http://localhost:3000`.
 | `ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION` | development only | Enables simulated WEBSITE Contributions and legacy write adapters. Always disabled when `NODE_ENV=production`. |
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | Delay between background checks for durable FeedIntent work. |
 | `OUTBOX_RETRY_DELAY_MS` | `1000` | Delay before retrying a failed Outbox processing attempt. |
+| `DEVICE_COMMAND_POLL_INTERVAL_MS` | `100` | Delay between durable Device Command reconciliation passes. |
+| `DEVICE_COMMAND_RETRY_DELAY_MS` | `1000` | Delay before retrying a command confirmed not to have run. |
+| `DEVICE_COMMAND_MAXIMUM_ATTEMPTS` | `3` | Maximum safe delivery attempts before a command fails. |
+| `DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS` | `5000` | Deadline for a device acknowledgement before reconciliation. |
 | `LIFECYCLE_COUNTDOWN_MS` | `10000` | Simulated countdown duration before the bell stage. |
 | `LIFECYCLE_BELL_MS` | `3000` | Simulated bell-stage duration. No bell hardware is controlled. |
 | `LIFECYCLE_DISPENSING_MS` | `2000` | Simulated dispensing-stage duration. No feeder hardware is controlled. |
@@ -95,7 +105,7 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. It backfills completed intents for existing Events, creates pending work for any eligible Contribution that did not yet create an Event, and preserves Event IDs, histories, timestamps, queue positions, and resource assignments. Its principal relationships are:
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Existing Events are preserved and receive no fabricated command history; commands are created only when those Events enter or resume `BELL` and `DISPENSING`. The principal relationships are:
 
 ```sql
 CREATE TABLE Events (
@@ -287,12 +297,14 @@ CREATE TABLE HardwareAcknowledgements (
 
 Verifying an eligible Contribution is one transaction containing the Contribution, FeedIntent, Outbox entry, and initial intent history. Processing it is one transaction containing the Event, its Contribution and FeedIntent references, `RECEIVED`, `VALIDATED`, and `QUEUED` history entries, FIFO queue record, `FEED_REQUEST_CREATED` audit record, and completed Outbox state. Each later lifecycle transition is another guarded transaction.
 
-On restart, an event already in `COUNTDOWN`, `BELL`, `DISPENSING`, or `COMPLETE` resumes at that state. The remaining simulated delay is calculated from the persisted state timestamp rather than restarting the full delay.
+On restart, an Event already in `COUNTDOWN`, `BELL`, `DISPENSING`, or `COMPLETE` resumes at that state. Countdown and archive timing use persisted timestamps. `BELL` and `DISPENSING` reconcile or resume their durable DeviceCommands and advance only after a successful acknowledgement.
 
 The durable creation pipeline is:
 
 ```text
 ProviderEvent -> Contribution -> FeedIntent -> Outbox -> Feed Request -> Queue
+Queue -> BELL -> RING_BELL command -> acknowledgement
+      -> DISPENSING -> DISPENSE_FEED command -> acknowledgement -> COMPLETE
 ```
 
 The Outbox worker starts with the application, repairs any verified eligible Contribution missing durable work, resets interrupted `PROCESSING` entries to `PENDING`, and processes them in Outbox sequence order. It stops accepting background work before the Event Engine closes during server shutdown.
@@ -317,7 +329,7 @@ stateDiagram-v2
 
 Every transition adds a timestamped timeline entry and a state-specific timestamp. Only the head of the FIFO queue can be processed. Processing and transition guards prevent the same Event ID from being advanced twice.
 
-The `BELL` and `DISPENSING` records include hardware-acknowledgement placeholders. The Event Engine persists future acknowledgement records, but Phase 5 does not connect to or control any device.
+Entering `BELL` creates exactly one `RING_BELL` command. Entering `DISPENSING` creates exactly one `DISPENSE_FEED` command. Commands pass through `PENDING`, `READY`, `SENT`, and `ACKNOWLEDGED`, with `RETRY_SCHEDULED`, `TIMED_OUT`, `FAILED`, `OUTCOME_UNKNOWN`, and `CANCELLED` available for non-happy paths. The simulated adapter emits durable acknowledgements; no real device is connected or controlled.
 
 ## API
 
@@ -453,14 +465,14 @@ The server writes newline-delimited JSON logs to standard output. Request-comple
 npm test
 ```
 
-The test suite covers FeedIntent creation, atomic Outbox processing, repeated attempts, failed-attempt retry, multiple pending intents, worker stop/start, claimed-work recovery, a file-backed stop/reopen crash scenario, migration of a stranded Phase 6C Contribution, and duplicate Event prevention. It also retains provider-scoped idempotency, verification and eligibility guards, production-disabled development writes, persistent audit history, backward-compatible APIs, the complete Event Engine lifecycle, browser integration, multi-feeder FIFO, simultaneous processing, queue statistics, acknowledgements, outages, and restart recovery.
+The test suite covers FeedIntent creation, atomic Outbox processing, repeated attempts, worker recovery, and duplicate Event prevention. Phase 7A coverage adds durable command creation and Outbox state, acknowledgement-gated lifecycle advancement, unavailable-device retry, reconnection, timeout, unknown outcomes, late/duplicate/out-of-order/malformed acknowledgements, cancellation, per-feeder ordering and isolation, stale-token fencing, graceful worker stop/start, mixed pending/retrying/timed-out recovery, and file-backed crash boundaries before delivery, after simulated action, and after acknowledgement. Existing API, ledger, browser, lifecycle, migration, and multi-feeder tests remain in place.
 
 ## Frontend connection
 
 The existing pages use `js/api-client.js` and `js/event-engine.js` to call this service at the URL configured by `CONFIG.apiBaseUrl`. The website submission now calls `/api/development/website-contributions`; no visual or journey changes were made. Feed requests, Event IDs, queue totals, queue positions, wait estimates, lifecycle states, queue entries, archive entries, and development reset all come from the server. The supporter page tracks its resulting Event through targeted REST reads, and both pages receive real-time state changes through the lifecycle event stream with polling as a fallback.
 
-The browser no longer owns or simulates a feed queue or countdown. The website's payment display and behaviour remain simulated, and the server-side WEBSITE verification used in development is not a real payment check. Countdown, bell, dispensing, and archive delays remain server-side simulations. Stripe, YouTube, TikTok, Facebook, hardware, authentication, supporter identity across page reloads, multi-process worker leasing, database backup automation, and production provider approval rules are not implemented.
+The browser no longer owns or simulates a feed queue or countdown. The website's payment display and behaviour remain simulated, and the server-side WEBSITE verification used in development is not a real payment check. Countdown and archive delays remain server-side simulations. Bell and dispensing are durable simulated Device Commands. Stripe, YouTube, TikTok, Facebook, real hardware, authentication, supporter identity across page reloads, multi-process worker leasing, database backup automation, and production provider approval rules are not implemented.
 
 ## Development Summary
 
-Phase 1 established the server boundary, Phases 2–5 connected the website and made lifecycle state durable, Phase 6A introduced stable resources, Phase 6B introduced independent feeder queues, and Phase 6C added the provider-neutral Contribution Ledger. Phase 6D inserts durable FeedIntent and Outbox boundaries before Event creation. Both transaction boundaries are restart-safe and one-to-one uniqueness makes worker retries idempotent. Existing Events migrate to completed intents, eligible Contributions without Events migrate to pending work, current APIs retain their response timing and shape, and no frontend files are changed by this phase. Real provider verification, payment settlement, authentication, hardware, PostgreSQL, multi-instance worker leasing, and operational backup/recovery remain future work.
+Phase 1 established the server boundary, Phases 2–5 connected the website and made lifecycle state durable, and Phase 6 added stable resources, independent feeder queues, the Contribution Ledger, FeedIntents, and its Outbox. Phase 7A adds the durable Device Command boundary between lifecycle intent and any future hardware transport. Commands and acknowledgements recover across restart, one Event action maps to one immutable command ID, simulated executions remain exactly once per command ID, and successful acknowledgement is required before lifecycle advancement. Current APIs and frontend files remain unchanged. A real hardware transport, operator resolution for unknown outcomes, authentication, PostgreSQL, multi-instance worker leasing, and operational backup/recovery remain future work.

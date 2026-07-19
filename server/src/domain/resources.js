@@ -16,6 +16,8 @@ export const DEFAULT_RESOURCE_IDS = Object.freeze({
     queueId: "queue_00000000-0000-4000-8000-000000000003"
 });
 
+export const DEFAULT_DEVICE_ID = "device_00000000-0000-4000-8000-000000000004";
+
 export const DEFAULT_RESOURCES = Object.freeze({
     barn: Object.freeze({
         barnId: DEFAULT_RESOURCE_IDS.barnId,
@@ -27,6 +29,13 @@ export const DEFAULT_RESOURCES = Object.freeze({
         feederId: DEFAULT_RESOURCE_IDS.feederId,
         barnId: DEFAULT_RESOURCE_IDS.barnId,
         name: "Default Feeder",
+        createdAt: DEFAULT_CREATED_AT
+    }),
+    device: Object.freeze({
+        deviceId: DEFAULT_DEVICE_ID,
+        barnId: DEFAULT_RESOURCE_IDS.barnId,
+        name: "Default Simulated Feeder Controller",
+        kind: "SIMULATED_FEEDER_CONTROLLER",
         createdAt: DEFAULT_CREATED_AT
     }),
     queue: Object.freeze({

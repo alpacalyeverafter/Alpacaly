@@ -3,6 +3,7 @@ import cors from "cors";
 
 import { loadConfig } from "./config/index.js";
 import { createContributionLedgerServices } from "./contribution-ledger/index.js";
+import { createDeviceCommandServices } from "./device-commands/index.js";
 import { EventEngine } from "./event-engine/event-engine.js";
 import { createLogger } from "./logging/logger.js";
 import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -17,6 +18,14 @@ export function createApp(options = {}) {
     const config = options.config || loadConfig();
     const logger = options.logger || createLogger(config);
     const eventEngine = options.eventEngine || new EventEngine({ config, logger });
+    const deviceCommandServices = options.deviceCommandServices
+        || createDeviceCommandServices({
+            eventEngine,
+            config,
+            logger,
+            clock: eventEngine.clock,
+            startWorker: true
+        });
     const contributionLedgerServices = options.contributionLedgerServices
         || createContributionLedgerServices({
             eventEngine,
@@ -32,6 +41,7 @@ export function createApp(options = {}) {
     app.locals.config = config;
     app.locals.logger = logger;
     app.locals.eventEngine = eventEngine;
+    app.locals.deviceCommandServices = deviceCommandServices;
     app.locals.contributionLedgerServices = contributionLedgerServices;
 
     app.use(cors({

@@ -5,14 +5,16 @@ import {
 } from "./002-resource-model.js";
 import { migration003ContributionLedger } from "./003-contribution-ledger.js";
 import { migration004DurableFeedIntentOutbox } from "./004-durable-feed-intent-outbox.js";
+import { migration005DurableDeviceCommands } from "./005-durable-device-commands.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 4;
+export const EVENT_STORE_SCHEMA_VERSION = 5;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
     migration002ResourceModel,
     migration003ContributionLedger,
-    migration004DurableFeedIntentOutbox
+    migration004DurableFeedIntentOutbox,
+    migration005DurableDeviceCommands
 ]);
 
 function readUserVersion(database) {

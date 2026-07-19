@@ -13,6 +13,7 @@ import { EventEngine } from "../src/event-engine/event-engine.js";
 import { SqliteEventStore } from "../src/event-store/sqlite-event-store.js";
 import {
     createTestLogger,
+    getTestDeviceCommandServices,
     submitTestFeedRequest,
     testConfig
 } from "./helpers.js";
@@ -70,7 +71,7 @@ function createMultiQueueEngine(overrides = {}) {
     }
 
     let nextId = 0;
-    return new EventEngine({
+    const engine = new EventEngine({
         config: { ...testConfig, ...overrides.config },
         logger: createTestLogger(),
         eventStore,
@@ -79,6 +80,8 @@ function createMultiQueueEngine(overrides = {}) {
         sleep: overrides.sleep || (async () => {}),
         autoProcess: overrides.autoProcess ?? false
     });
+    getTestDeviceCommandServices(engine);
+    return engine;
 }
 
 function temporaryDatabase(t) {
@@ -319,7 +322,7 @@ test("restores multiple isolated queues and resumes each after restart", async t
         resumedEngine.getArchivedSummary(RESOURCES.betaFeederId).map(event => event.eventId),
         [betaFirst.feedRequest.eventId]
     );
-    assert.equal(resumedEngine.eventStore.getSchemaVersion(), 4);
+    assert.equal(resumedEngine.eventStore.getSchemaVersion(), 5);
 
     resumedEngine.close();
 });
