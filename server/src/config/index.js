@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { resolve } from "node:path";
 
 import { DEFAULTS } from "./defaults.js";
 
@@ -49,19 +50,36 @@ function parseTime(value, fallback, name) {
     return candidate;
 }
 
+function parseDatabasePath(value) {
+    const candidate = value === undefined
+        ? DEFAULTS.databasePath
+        : String(value).trim();
+    if (!candidate) {
+        throw new Error("DATABASE_PATH must not be empty.");
+    }
+
+    return candidate === ":memory:" ? candidate : resolve(candidate);
+}
+
 export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     if (loadEnvFile) {
         dotenv.config({ quiet: true });
     }
 
+    const nodeEnv = String(env.NODE_ENV || DEFAULTS.nodeEnv);
     const requestBodyLimit = String(env.REQUEST_BODY_LIMIT || DEFAULTS.requestBodyLimit).trim();
     if (!requestBodyLimit) {
         throw new Error("REQUEST_BODY_LIMIT must not be empty.");
     }
 
+    const corsOrigin = String(env.CORS_ORIGIN || DEFAULTS.corsOrigin).trim();
+    if (!corsOrigin) {
+        throw new Error("CORS_ORIGIN must not be empty.");
+    }
+
     return Object.freeze({
         serviceName: DEFAULTS.serviceName,
-        nodeEnv: String(env.NODE_ENV || DEFAULTS.nodeEnv),
+        nodeEnv,
         port: parseInteger(env.PORT, DEFAULTS.port, "PORT", { maximum: 65535 }),
         logLevel: String(env.LOG_LEVEL || DEFAULTS.logLevel),
         maxDailyFeeds: parseInteger(env.MAX_DAILY_FEEDS, DEFAULTS.maxDailyFeeds, "MAX_DAILY_FEEDS"),
@@ -80,6 +98,37 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             DEFAULTS.feedingWindowEnd,
             "FEEDING_WINDOW_END"
         ),
-        requestBodyLimit
+        requestBodyLimit,
+        corsOrigin,
+        databasePath: parseDatabasePath(env.DATABASE_PATH),
+        enableDemoReset: parseBoolean(
+            env.ENABLE_DEMO_RESET,
+            nodeEnv !== "production",
+            "ENABLE_DEMO_RESET"
+        ),
+        lifecycleCountdownMs: parseInteger(
+            env.LIFECYCLE_COUNTDOWN_MS,
+            DEFAULTS.lifecycleCountdownMs,
+            "LIFECYCLE_COUNTDOWN_MS",
+            { minimum: 0 }
+        ),
+        lifecycleBellMs: parseInteger(
+            env.LIFECYCLE_BELL_MS,
+            DEFAULTS.lifecycleBellMs,
+            "LIFECYCLE_BELL_MS",
+            { minimum: 0 }
+        ),
+        lifecycleDispensingMs: parseInteger(
+            env.LIFECYCLE_DISPENSING_MS,
+            DEFAULTS.lifecycleDispensingMs,
+            "LIFECYCLE_DISPENSING_MS",
+            { minimum: 0 }
+        ),
+        lifecycleArchiveDelayMs: parseInteger(
+            env.LIFECYCLE_ARCHIVE_DELAY_MS,
+            DEFAULTS.lifecycleArchiveDelayMs,
+            "LIFECYCLE_ARCHIVE_DELAY_MS",
+            { minimum: 0 }
+        )
     });
 }

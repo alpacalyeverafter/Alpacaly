@@ -5,6 +5,15 @@ import { ApplicationError } from "../errors/application-error.js";
 export function createFeedRequestsRouter({ eventEngine }) {
     const router = Router();
 
+    router.get("/", (req, res) => {
+        res.status(200).json({
+            feedRequests: eventEngine.getQueueSummary(),
+            archivedFeedRequests: eventEngine.getArchivedSummary(),
+            eventEngine: eventEngine.getSnapshot(),
+            requestId: req.requestId
+        });
+    });
+
     router.post("/", (req, res, next) => {
         try {
             const result = eventEngine.submitFeedRequest(req.body);
@@ -13,6 +22,8 @@ export function createFeedRequestsRouter({ eventEngine }) {
                 accepted: true,
                 feedRequest: result.feedRequest,
                 queuePosition: result.queuePosition,
+                estimatedWaitMs: result.estimatedWaitMs,
+                eventEngine: eventEngine.getSnapshot(),
                 requestId: req.requestId
             });
         } catch (error) {

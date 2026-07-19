@@ -15,7 +15,7 @@ const server = app.listen(config.port, () => {
 });
 
 let shutdownStarted = false;
-function shutdown(signal) {
+async function shutdown(signal) {
     if (shutdownStarted) {
         return;
     }
@@ -23,15 +23,29 @@ function shutdown(signal) {
     shutdownStarted = true;
     logger.info({ event: "server_shutdown_started", signal }, "Server shutdown started");
 
-    server.close(error => {
-        if (error) {
-            logger.error({ event: "server_shutdown_failed", err: error }, "Server shutdown failed");
-            process.exitCode = 1;
-        } else {
-            logger.info({ event: "server_stopped" }, "Alpacaly server stopped");
-        }
+    const serverClosed = new Promise(resolve => {
+        server.close(error => resolve(error));
     });
+
+    try {
+        await app.locals.eventEngine.shutdown();
+    } catch (error) {
+        logger.error({
+            event: "event_store_shutdown_failed",
+            err: error
+        }, "Event Store shutdown failed");
+        process.exitCode = 1;
+    }
+
+    server.closeAllConnections();
+    const error = await serverClosed;
+    if (error) {
+        logger.error({ event: "server_shutdown_failed", err: error }, "Server shutdown failed");
+        process.exitCode = 1;
+    } else {
+        logger.info({ event: "server_stopped" }, "Alpacaly server stopped");
+    }
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));

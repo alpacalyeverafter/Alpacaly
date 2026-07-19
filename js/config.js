@@ -5,23 +5,18 @@
 
 const CONFIG = {
 
-    simulationMode: true,
+    paymentSimulationMode: true,
 
     DEMO_MAX_FEEDS: 100,
 
-    countdownSeconds: 10,
+    apiBaseUrl: "http://localhost:3000",
 
-    feedDuration: 2000,
+    apiRequestTimeoutMs: 5000,
 
-    bellDuration: 3000,
-
-    completeDelay: 2000,
-
-    feedingWindows: [
-        {
-            start: "08:00",
-            end: "18:00"
-        }
-    ]
+    apiPollIntervalMs: 5000
 
 };
+
+if (typeof window !== "undefined") {
+    window.CONFIG = CONFIG;
+}

@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 
 import { loadConfig } from "./config/index.js";
 import { EventEngine } from "./event-engine/event-engine.js";
@@ -20,12 +21,18 @@ export function createApp(options = {}) {
     app.locals.logger = logger;
     app.locals.eventEngine = eventEngine;
 
+    app.use(cors({
+        origin: config.corsOrigin,
+        methods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["content-type", "x-request-id"],
+        exposedHeaders: ["x-request-id"]
+    }));
     app.use(requestLogger(logger));
     app.use(express.json({ limit: config.requestBodyLimit }));
 
     app.use("/health", createHealthRouter({ config }));
     app.use("/api/feed-requests", createFeedRequestsRouter({ eventEngine }));
-    app.use("/api/event-engine", createEventEngineRouter({ eventEngine }));
+    app.use("/api/event-engine", createEventEngineRouter({ eventEngine, config }));
 
     app.use(notFoundHandler);
     app.use(createErrorHandler(logger));

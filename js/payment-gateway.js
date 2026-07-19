@@ -6,8 +6,8 @@
 class PaymentGateway {
     constructor(config = {}) {
         this.config = config || {};
-        this.config.simulationMode = this.config.simulationMode !== undefined
-            ? this.config.simulationMode
+        this.config.paymentSimulationMode = this.config.paymentSimulationMode !== undefined
+            ? this.config.paymentSimulationMode
             : true;
         this.payments = this.loadPayments();
     }
@@ -79,7 +79,7 @@ class PaymentGateway {
 
         const paymentId = this.generatePaymentId();
 
-        if (this.config.simulationMode) {
+        if (this.config.paymentSimulationMode) {
             await this.delay(2000);
         }
 
@@ -107,3 +107,7 @@ class PaymentGateway {
 }
 
 const paymentGateway = new PaymentGateway(CONFIG);
+
+if (typeof window !== "undefined") {
+    window.paymentGateway = paymentGateway;
+}

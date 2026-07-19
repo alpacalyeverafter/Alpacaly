@@ -2,7 +2,7 @@
   "name": "alpacaly-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Phase 1 backend for Alpacaly Ever After",
+  "description": "Server-side Event Engine for Alpacaly Ever After",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
@@ -13,6 +13,7 @@
     "test": "node --test --test-concurrency=1 test/*.test.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "pino": "^9.7.0"

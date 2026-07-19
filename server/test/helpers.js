@@ -9,7 +9,14 @@ export const testConfig = Object.freeze({
     enforceFeedingWindow: false,
     feedingWindowStart: "08:00",
     feedingWindowEnd: "18:00",
-    requestBodyLimit: "16kb"
+    requestBodyLimit: "16kb",
+    corsOrigin: "*",
+    databasePath: ":memory:",
+    enableDemoReset: true,
+    lifecycleCountdownMs: 0,
+    lifecycleBellMs: 0,
+    lifecycleDispensingMs: 0,
+    lifecycleArchiveDelayMs: 0
 });
 
 export function createTestLogger() {

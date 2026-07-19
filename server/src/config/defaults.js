@@ -7,5 +7,11 @@ export const DEFAULTS = Object.freeze({
     enforceFeedingWindow: false,
     feedingWindowStart: "08:00",
     feedingWindowEnd: "18:00",
-    requestBodyLimit: "16kb"
+    requestBodyLimit: "16kb",
+    corsOrigin: "*",
+    databasePath: "./data/alpacaly.sqlite",
+    lifecycleCountdownMs: 10000,
+    lifecycleBellMs: 3000,
+    lifecycleDispensingMs: 2000,
+    lifecycleArchiveDelayMs: 2000
 });
