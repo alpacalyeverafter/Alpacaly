@@ -1,1 +1,6 @@
 .DS_Store
+*.dump
+backup-*.manifest.json
+*.backup-operation.json
+*.restore-report.json
+*.deletion-audit.json

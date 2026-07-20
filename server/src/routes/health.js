@@ -4,6 +4,7 @@ export function createHealthRouter({
     config,
     eventStore = null,
     claimStores = [],
+    recoverySafetyService = null,
     clock = () => new Date()
 }) {
     const router = Router();
@@ -22,8 +23,9 @@ export function createHealthRouter({
         try {
             const persistence = eventStore?.getPersistenceDiagnostics();
             claimStores.forEach(store => store.getDiagnostics());
-            res.status(200).json({
-                status: "ready",
+            const recoveryBlocked = recoverySafetyService?.isBlocked() === true;
+            res.status(recoveryBlocked ? 503 : 200).json({
+                status: recoveryBlocked ? "not_ready" : "ready",
                 service: config.serviceName,
                 environment: config.nodeEnv,
                 persistence: {
@@ -32,6 +34,10 @@ export function createHealthRouter({
                     reachable: true
                 },
                 workerCoordination: { reachable: true },
+                recovery: {
+                    workersBlocked: recoveryBlocked,
+                    mode: recoveryBlocked ? "BLOCKED" : "NORMAL"
+                },
                 timestamp: clock().toISOString()
             });
         } catch {

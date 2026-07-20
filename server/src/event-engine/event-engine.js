@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { RecoverySafetyService } from "../disaster-recovery/recovery-safety-service.js";
 import { ApplicationError } from "../errors/application-error.js";
 import { createCentralEventStore } from "../event-store/central-event-store.js";
 import { createDistributedClaimStore } from "../worker-coordination/distributed-claim-store.js";
@@ -70,7 +71,8 @@ export class EventEngine {
         idGenerator = randomUUID,
         sleep = defaultSleep,
         autoProcess = true,
-        eventStore = null
+        eventStore = null,
+        recoverySafetyService = null
     }) {
         this.config = config;
         this.logger = logger;
@@ -79,6 +81,12 @@ export class EventEngine {
         this.sleep = sleep;
         this.autoProcess = autoProcess;
         this.eventStore = eventStore || createCentralEventStore({ config, logger });
+        this.recoverySafetyService = recoverySafetyService || new RecoverySafetyService({
+            eventStore: this.eventStore,
+            config,
+            logger,
+            clock
+        });
         this.lifecycleClaimStore = createDistributedClaimStore({
             eventStore: this.eventStore,
             config,
@@ -89,7 +97,11 @@ export class EventEngine {
             serviceType: "event-lifecycle",
             clock
         });
-        this.lifecycleClaimStore.registerWorker(this.lifecycleWorkerIdentity);
+        this.lifecycleWorkerRegistered = false;
+        if (this.recoverySafetyService.workersMayStart()) {
+            this.lifecycleClaimStore.registerWorker(this.lifecycleWorkerIdentity);
+            this.lifecycleWorkerRegistered = true;
+        }
         this.lifecycleWorkerHeartbeatTimer = null;
         this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
         this.deviceCommandService = null;
@@ -115,8 +127,10 @@ export class EventEngine {
         this.currentDateKey = localDateKey(this.clock());
 
         this.restoreFromEventStore();
-        this.scheduleLifecycleWorkerHeartbeat();
-        this.scheduleProcessing();
+        if (this.lifecycleWorkerRegistered) {
+            this.scheduleLifecycleWorkerHeartbeat();
+            this.scheduleProcessing();
+        }
     }
 
     createFeedRequestFromFeedIntent(payload, {
@@ -126,6 +140,7 @@ export class EventEngine {
         auditRecord = null,
         workClaim = null
     } = {}) {
+        this.recoverySafetyService.assertOperationAllowed("FEED_REQUEST_CREATION");
         if (typeof feedIntentId !== "string" || !feedIntentId.trim()) {
             throw new ApplicationError(
                 "A durable FeedIntent is required to create a feed request.",
@@ -1297,7 +1312,8 @@ export class EventEngine {
     isFeederProcessingAvailable(feederId) {
         const operationallyAvailable = this.eventStore
             .getFeederOperationalStatus(feederId)?.operationalStatus === "AVAILABLE";
-        return operationallyAvailable
+        return this.recoverySafetyService.workersMayStart()
+            && operationallyAvailable
             && (!this.safetyService || this.safetyService.canProcessFeeder(feederId));
     }
 

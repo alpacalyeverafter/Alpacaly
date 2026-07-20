@@ -38,6 +38,7 @@ export class DeviceCommandWorker {
         claimHeartbeatIntervalMs = 5000,
         maximumClaimAttempts = 10,
         sleep = wait,
+        recoverySafetyService = null,
         onOutcomeUnknown = () => {}
     }) {
         this.deviceCommandStore = deviceCommandStore;
@@ -58,6 +59,7 @@ export class DeviceCommandWorker {
         this.maximumClaimAttempts = maximumClaimAttempts;
         this.sleep = sleep;
         this.onOutcomeUnknown = onOutcomeUnknown;
+        this.recoverySafetyService = recoverySafetyService;
         this.safetyService = null;
         this.started = false;
         this.transportStarted = false;
@@ -71,7 +73,13 @@ export class DeviceCommandWorker {
 
     start() {
         if (this.started) {
-            return;
+            return true;
+        }
+        if (this.recoverySafetyService && !this.recoverySafetyService.workersMayStart()) {
+            this.logger.warn({
+                event: "device_command_worker_recovery_blocked"
+            }, "Device Command worker remains disabled in recovery safety mode");
+            return false;
         }
         if (this.abortController.signal.aborted) {
             this.abortController = new AbortController();
@@ -84,12 +92,14 @@ export class DeviceCommandWorker {
         void this.reconcileOutstanding({ force: true });
         void this.processReadyCommands();
         this.scheduleNextPoll();
+        return true;
     }
 
     startTransport() {
         if (this.transportStarted) {
             return;
         }
+        this.recoverySafetyService?.assertWorkerMayStart("DEVICE_COMMAND_TRANSPORT");
         if (this.abortController.signal.aborted) {
             this.abortController = new AbortController();
         }
@@ -154,6 +164,21 @@ export class DeviceCommandWorker {
     }
 
     processCommand(commandId, { forceReconcile = false } = {}) {
+        if (this.recoverySafetyService) {
+            try {
+                this.recoverySafetyService.assertCommandMayProgress(commandId);
+            } catch (error) {
+                if ([
+                    "RECOVERY_SAFETY_MODE_ACTIVE",
+                    "RESTORED_COMMAND_REVIEW_REQUIRED"
+                ].includes(error?.code)) {
+                    return Promise.resolve(
+                        this.deviceCommandStore.getCommand(commandId)
+                    );
+                }
+                throw error;
+            }
+        }
         this.startTransport();
         const existing = this.inFlight.get(commandId);
         if (existing) {
@@ -168,11 +193,14 @@ export class DeviceCommandWorker {
     }
 
     async processCommandOnce(commandId, { forceReconcile = false } = {}) {
-        this.ensureWorkerRegistered();
         const initial = this.deviceCommandStore.getCommand(commandId);
         if (!initial || isTerminalDeviceCommandState(initial.status)) {
             return initial;
         }
+        if (!this.commandMayProgress(initial)) {
+            return initial;
+        }
+        this.ensureWorkerRegistered();
         const claim = this.claimStore.claim(
             "DEVICE_COMMAND",
             commandId,
@@ -468,6 +496,19 @@ export class DeviceCommandWorker {
     }
 
     commandMayProgress(command) {
+        if (this.recoverySafetyService) {
+            try {
+                this.recoverySafetyService.assertCommandMayProgress(command.commandId);
+            } catch (error) {
+                if ([
+                    "RECOVERY_SAFETY_MODE_ACTIVE",
+                    "RESTORED_COMMAND_REVIEW_REQUIRED"
+                ].includes(error?.code)) {
+                    return false;
+                }
+                throw error;
+            }
+        }
         if (!this.safetyService) {
             return true;
         }
@@ -527,7 +568,12 @@ export class DeviceCommandWorker {
     }
 
     async processReadyCommands() {
-        if (this.processingPoll || this.deviceCommandStore.eventStore.closed) {
+        if (
+            this.processingPoll
+            || this.deviceCommandStore.eventStore.closed
+            || (this.recoverySafetyService
+                && !this.recoverySafetyService.workersMayStart())
+        ) {
             return [];
         }
         this.processingPoll = true;

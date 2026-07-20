@@ -14,6 +14,12 @@
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "test:postgres": "node --test --test-concurrency=1 test/postgres-integration.test.js",
+    "test:postgres:restore": "node --test --test-concurrency=1 test/postgres-backup-restore.test.js",
+    "backup:postgres": "node scripts/postgres-backup.js",
+    "restore:postgres": "node scripts/postgres-restore.js",
+    "reconcile:postgres-restore": "node scripts/postgres-reconcile-restore.js",
+    "release:postgres-recovery": "node scripts/postgres-release-recovery.js",
+    "cleanup:test-backups": "node scripts/cleanup-test-backups.js",
     "migrate:sqlite-to-postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "benchmark:postgres-contention": "node scripts/postgres-contention-baseline.js"
   },

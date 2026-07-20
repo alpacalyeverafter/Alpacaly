@@ -99,7 +99,7 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
         message: "PostgreSQL persistence parity"
     });
 
-    assert.equal(eventStore.getSchemaVersion(), 3);
+    assert.equal(eventStore.getSchemaVersion(), 4);
     assert.equal(result.created, true);
     assert.equal(eventStore.getFeedIntent(result.feedIntent.feedIntentId).status, "COMPLETED");
     assert.equal(eventStore.getEventIdByFeedIntent(result.feedIntent.feedIntentId),

@@ -99,7 +99,8 @@ export function createAdministratorRouter({
     administratorSecurityServices,
     deviceCommandServices,
     contributionLedgerServices,
-    operatorSafetyServices
+    operatorSafetyServices,
+    recoveryDiagnosticsService = null
 }) {
     const router = Router();
     const services = administratorSecurityServices;
@@ -141,6 +142,7 @@ export function createAdministratorRouter({
                         row => [row.status, Number(row.count)]
                     ))
                 },
+                disasterRecovery: recoveryDiagnosticsService?.getDiagnostics() || null,
                 requestId: req.requestId
             });
         }

@@ -5,6 +5,7 @@ import { createAdministratorSecurityServices } from "./administrator-security/in
 import { loadConfig } from "./config/index.js";
 import { createContributionLedgerServices } from "./contribution-ledger/index.js";
 import { createDeviceCommandServices } from "./device-commands/index.js";
+import { RecoveryDiagnosticsService } from "./disaster-recovery/recovery-diagnostics-service.js";
 import { EventEngine } from "./event-engine/event-engine.js";
 import { createLogger } from "./logging/logger.js";
 import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -57,7 +58,16 @@ export function createApp(options = {}) {
             config,
             clock: eventEngine.clock
         });
-    if (!options.deviceCommandServices) {
+    const recoveryDiagnosticsService = options.recoveryDiagnosticsService
+        || new RecoveryDiagnosticsService({
+            recoverySafetyService: eventEngine.recoverySafetyService,
+            config,
+            clock: eventEngine.clock
+        });
+    if (
+        !options.deviceCommandServices
+        && eventEngine.recoverySafetyService.workersMayStart()
+    ) {
         deviceCommandServices.worker.start();
     }
     const app = express();
@@ -70,6 +80,8 @@ export function createApp(options = {}) {
     app.locals.contributionLedgerServices = contributionLedgerServices;
     app.locals.administratorSecurityServices = administratorSecurityServices;
     app.locals.operatorSafetyServices = operatorSafetyServices;
+    app.locals.recoverySafetyService = eventEngine.recoverySafetyService;
+    app.locals.recoveryDiagnosticsService = recoveryDiagnosticsService;
 
     app.use(cors({
         origin: config.corsOrigin,
@@ -87,7 +99,8 @@ export function createApp(options = {}) {
             eventEngine.lifecycleClaimStore,
             contributionLedgerServices.claimStore,
             deviceCommandServices.claimStore
-        ].filter(Boolean)
+        ].filter(Boolean),
+        recoverySafetyService: eventEngine.recoverySafetyService
     }));
     app.use("/api/feed-requests", createFeedRequestsRouter({
         eventEngine,
@@ -116,7 +129,8 @@ export function createApp(options = {}) {
         administratorSecurityServices,
         deviceCommandServices,
         contributionLedgerServices,
-        operatorSafetyServices
+        operatorSafetyServices,
+        recoveryDiagnosticsService
     }));
     app.use("/api/event-engine", createEventEngineRouter({
         eventEngine,

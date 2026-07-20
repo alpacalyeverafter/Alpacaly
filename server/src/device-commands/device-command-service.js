@@ -15,6 +15,7 @@ export class DeviceCommandService {
         maximumAttempts = 3,
         clock = () => new Date(),
         idGenerator = randomUUID,
+        recoverySafetyService = null,
         onCommandAcknowledged = () => {},
         onCommandOutcomeUnknown = () => {}
     }) {
@@ -25,6 +26,7 @@ export class DeviceCommandService {
         this.maximumAttempts = maximumAttempts;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.recoverySafetyService = recoverySafetyService;
         this.onCommandAcknowledged = onCommandAcknowledged;
         this.onCommandOutcomeUnknown = onCommandOutcomeUnknown;
         this.worker = null;
@@ -55,6 +57,8 @@ export class DeviceCommandService {
         if (existing) {
             return { command: existing, created: false };
         }
+
+        this.recoverySafetyService?.assertOperationAllowed("DEVICE_COMMAND_CREATION");
 
         if (this.safetyService?.isFeederBlocked(
             feedRequest.feederId,
@@ -130,6 +134,9 @@ export class DeviceCommandService {
         approvalRequestId,
         welfareCheck
     }) {
+        this.recoverySafetyService?.assertOperationAllowed(
+            "AUTOMATIC_REPLACEMENT_COMMAND"
+        );
         const existing = this.deviceCommandStore.getCommandsForEvent(
             originalCommand.eventId
         ).find(command => command.resolutionCaseId === resolutionCase.resolutionCaseId);

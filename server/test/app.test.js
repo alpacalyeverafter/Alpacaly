@@ -53,7 +53,7 @@ test("GET /health/ready reports sanitized persistence readiness", async () => {
     assert.equal(response.body.status, "ready");
     assert.deepEqual(response.body.persistence, {
         databaseType: "sqlite",
-        schemaVersion: 11,
+        schemaVersion: 12,
         reachable: true
     });
     assert.equal(response.body.workerCoordination.reachable, true);

@@ -7,13 +7,17 @@ import {
 import {
     migration003RelationalSafetyGuards
 } from "./003-relational-safety-guards.js";
+import {
+    migration004DisasterRecoverySafety
+} from "./004-disaster-recovery-safety.js";
 
-export const POSTGRES_SCHEMA_VERSION = 3;
+export const POSTGRES_SCHEMA_VERSION = 4;
 
 export const POSTGRES_MIGRATIONS = Object.freeze([
     migration001CentralSchema,
     migration002DistributedWorkerCoordination,
-    migration003RelationalSafetyGuards
+    migration003RelationalSafetyGuards,
+    migration004DisasterRecoverySafety
 ]);
 
 function checksum(sql) {

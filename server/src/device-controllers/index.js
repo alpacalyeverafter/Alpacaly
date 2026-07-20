@@ -14,7 +14,8 @@ export function createDeviceControllerServices({
     controllerSleep,
     logger,
     mqttConnect,
-    transport = null
+    transport = null,
+    recoverySafetyService = null
 }) {
     const store = new SqliteDeviceControllerStore({
         eventStore,
@@ -72,7 +73,8 @@ export function createDeviceControllerServices({
         store,
         transport: deviceTransport,
         config,
-        clock
+        clock,
+        recoverySafetyService
     });
     return {
         controllerStore: store,

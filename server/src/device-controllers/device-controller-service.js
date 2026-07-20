@@ -12,11 +12,18 @@ function requireReason(value) {
 }
 
 export class DeviceControllerService {
-    constructor({ store, transport, config, clock = () => new Date() }) {
+    constructor({
+        store,
+        transport,
+        config,
+        clock = () => new Date(),
+        recoverySafetyService = null
+    }) {
         this.store = store;
         this.transport = transport;
         this.config = config;
         this.clock = clock;
+        this.recoverySafetyService = recoverySafetyService;
         this.auditService = null;
         this.approvalService = null;
         this.worker = null;
@@ -63,6 +70,9 @@ export class DeviceControllerService {
     }
 
     setEnabled(controllerId, enabled, context) {
+        if (enabled) {
+            this.recoverySafetyService?.assertOperationAllowed("CONTROLLER_ENABLEMENT");
+        }
         const before = this.get(controllerId);
         const reason = requireReason(context?.reason);
         if (enabled && !before.enabled && this.config.nodeEnv === "production") {
@@ -110,6 +120,7 @@ export class DeviceControllerService {
     }
 
     executeApprovedEnable(request, context) {
+        this.recoverySafetyService?.assertOperationAllowed("CONTROLLER_ENABLEMENT");
         const controllerId = request.actionPayload.controllerId;
         const before = this.get(controllerId);
         if (before.enabled) {

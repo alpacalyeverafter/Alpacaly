@@ -1,6 +1,6 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7F-2A backend and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
+This directory contains the Phase 7F backend, PostgreSQL recovery tooling, and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
 ## Phase 7F-2A boundaries
 
@@ -90,6 +90,10 @@ Included:
   retries, dead-letter state, and operator-review state
 - Real PostgreSQL and two-process contention tests in CI
 - Offline SQLite-to-PostgreSQL migration and reconciliation tooling
+- PostgreSQL-native versioned backup manifests with SHA-256 checksums
+- Isolated restore, domain reconciliation, restored-claim fencing, and persistent recovery safety mode
+- Individually locked restored Device Commands and explicit supervised worker release
+- Provider-neutral backup catalogue, retention calculations, diagnostics, and CI restore drill
 
 Intentionally excluded:
 
@@ -140,6 +144,14 @@ The default server address is `http://localhost:3000`.
 | `POSTGRES_CONNECTION_TIMEOUT_MS` | `5000` | Maximum connection establishment wait. |
 | `POSTGRES_STATEMENT_TIMEOUT_MS`, `POSTGRES_LOCK_TIMEOUT_MS` | `15000`, `5000` | Database statement and lock wait bounds. |
 | `POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS` | `15000` | Fails abandoned database transactions closed. |
+| `RECOVERY_SAFETY_MODE` | `false` | Forces all feeding and Device Command workers off. A restored database also persists its own block until explicit release. |
+| `BACKUP_CATALOGUE_DIRECTORY` | unset | Absolute directory containing manifests and reports; paths are never exposed by diagnostics. |
+| `BACKUP_RETENTION_DAILY_DAYS` | `14` | Proposed daily-backup retention calculation. |
+| `BACKUP_RETENTION_WEEKLY_WEEKS` | `8` | Proposed weekly-backup retention calculation. |
+| `BACKUP_RETENTION_MONTHLY_MONTHS` | `12` | Proposed monthly-backup retention calculation. |
+| `BACKUP_MINIMUM_RETENTION_DAYS` | `7` | Minimum retention floor unless a longer cadence applies. |
+| `BACKUP_MAXIMUM_AGE_HOURS` | `24` | Readiness diagnostic threshold for backup age. |
+| `RESTORE_DRILL_MAXIMUM_AGE_DAYS` | `30` | Diagnostic threshold for overdue restore testing. |
 | `WORKER_LEASE_DURATION_MS`, `WORKER_HEARTBEAT_INTERVAL_MS` | `30000`, `5000` | Distributed ownership lease and renewal cadence. |
 | `WORKER_MAXIMUM_CLAIM_DURATION_MS` | `300000` | Hard non-extendable ownership duration. |
 | `WORKER_MAXIMUM_ATTEMPTS` | `10` | Bound before safe work enters dead-letter state. |
@@ -185,7 +197,27 @@ The default server address is `http://localhost:3000`.
 
 The central Event Store uses PostgreSQL in production and `node:sqlite` for zero-setup development/testing. File-backed SQLite databases retain foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout. The independent edge journal remains SQLite in every environment.
 
-The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 11 adds daily feed reservations and distributed worker coordination. PostgreSQL migrations create the equivalent central schema, native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
+The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 11 adds daily feed reservations and distributed worker coordination; migration 12 adds central recovery safety state, restored-command reviews, and append-only disaster-recovery evidence. PostgreSQL migrations create the equivalent central schema, native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
+
+## Backup and recovery commands
+
+Backups and restores are deliberately limited to test and staging in this phase. Credentials are supplied through environment variables and are never placed in command arguments or reports.
+
+```sh
+CENTRAL_DATABASE_TYPE=postgres \
+DATABASE_URL='<secret supplied by deployment>' \
+NODE_ENV=staging \
+npm run backup:postgres -- --output-dir /absolute/secure/catalogue
+
+RESTORE_DATABASE_URL='<isolated target secret>' \
+npm run restore:postgres -- \
+  --manifest /absolute/secure/catalogue/<backup>.manifest.json \
+  --target-environment staging \
+  --isolated-target \
+  --approve-empty-target
+```
+
+Restore never starts writers or workers. After checksum validation, restore, claim fencing, command classification, and reconciliation, safe work and workers require separate recorded decisions through `npm run release:postgres-recovery`. A successful backup command records an artifact; it does not prove recoverability. See [PostgreSQL backup and restore](docs/postgresql-backup-restore.md), the [disaster-recovery runbook](docs/disaster-recovery-runbook.md), and the [managed PostgreSQL handoff](docs/managed-postgresql-handoff.md).
 
 ## Simulated controller and MQTT architecture
 

@@ -85,6 +85,7 @@ export function createAdministratorSecurityServices({
         eventEngine,
         deviceCommandStore: deviceCommandServices.deviceCommandStore,
         deviceCommandWorker: deviceCommandServices.worker,
+        recoverySafetyService: eventEngine.recoverySafetyService,
         ...options
     });
 

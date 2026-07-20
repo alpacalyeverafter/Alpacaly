@@ -23,6 +23,7 @@ export class ResourceOperationsService {
         eventEngine,
         deviceCommandStore,
         deviceCommandWorker,
+        recoverySafetyService = null,
         clock = () => new Date(),
         idGenerator = randomUUID
     }) {
@@ -31,12 +32,16 @@ export class ResourceOperationsService {
         this.eventEngine = eventEngine;
         this.deviceCommandStore = deviceCommandStore;
         this.deviceCommandWorker = deviceCommandWorker;
+        this.recoverySafetyService = recoverySafetyService;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
 
     setFeederStatus(feederId, barnId, status, context) {
         const normalizedStatus = String(status || "").trim().toUpperCase();
+        if (normalizedStatus === "AVAILABLE") {
+            this.recoverySafetyService?.assertOperationAllowed("FEEDER_ENABLEMENT");
+        }
         if (!FEEDER_STATUSES.includes(normalizedStatus)) {
             throw new ApplicationError("Feeder status is not supported.", {
                 code: "FEEDER_STATUS_NOT_SUPPORTED",
@@ -99,6 +104,9 @@ export class ResourceOperationsService {
 
     setDeviceStatus(deviceId, barnId, status, context) {
         const normalizedStatus = String(status || "").trim().toUpperCase();
+        if (normalizedStatus === "AVAILABLE") {
+            this.recoverySafetyService?.assertOperationAllowed("DEVICE_ENABLEMENT");
+        }
         if (!DEVICE_STATUSES.includes(normalizedStatus)) {
             throw new ApplicationError("Device status is not supported.", {
                 code: "DEVICE_STATUS_NOT_SUPPORTED",
