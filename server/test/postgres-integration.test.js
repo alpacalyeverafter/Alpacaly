@@ -206,6 +206,26 @@ test("PostgreSQL optional emergency-stop filters accept null and typed values", 
     }
 });
 
+test("PostgreSQL aggregate aliases retain the row shape used by reconciliation", {
+    skip
+}, () => {
+    const eventStore = new PostgresEventStore({
+        config: postgresConfig(),
+        logger: createTestLogger()
+    });
+    try {
+        const row = eventStore.database.prepare(`
+            SELECT COUNT(*) AS count, COUNT(*) AS reconciliationCount
+            FROM Events
+        `).get();
+        assert.equal(Number.isInteger(row.count), true);
+        assert.equal(row.reconciliationCount, row.count);
+        assert.equal("COUNT" in row, false);
+    } finally {
+        eventStore.close();
+    }
+});
+
 test("two PostgreSQL processes cannot acquire the same claim", { skip }, async () => {
     const workItemId = `process-contention-${randomUUID()}`;
     const startAt = Date.now() + 1500;

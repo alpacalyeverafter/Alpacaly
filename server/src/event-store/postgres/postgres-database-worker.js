@@ -47,7 +47,9 @@ function rememberIdentifiers(source) {
     const text = Array.isArray(source) ? source.join("\n") : String(source || "");
     for (const match of text.matchAll(/\b[A-Za-z][A-Za-z0-9_]*\b/g)) {
         const value = match[0];
-        if (/[A-Z]/.test(value)) {
+        // Preserve application camelCase identifiers without treating SQL
+        // keywords and function names such as COUNT as result-column names.
+        if (/[A-Z]/.test(value) && /[a-z]/.test(value)) {
             identifiers.set(value.toLowerCase(), value);
         }
     }

@@ -256,7 +256,14 @@ test("PostgreSQL native backup restores safely into a disposable database", {
         config: targetConfig,
         logger
     });
-    assert.equal(restored.report.status, "PASS");
+    const blockedChecks = restored.report.reconciliation.checks
+        .filter(check => check.status === "BLOCKED")
+        .map(check => ({ name: check.name, details: check.details }));
+    assert.equal(
+        restored.report.status,
+        "PASS",
+        `Blocked reconciliation checks: ${JSON.stringify(blockedChecks)}`
+    );
     assert.equal(restored.report.workersStarted, false);
     assert.equal(restored.report.feedingStarted, false);
     assert.equal(restored.report.claimFencing.fenced >= 1, true);
