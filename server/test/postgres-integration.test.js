@@ -100,10 +100,10 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
     });
 
     assert.equal(eventStore.getSchemaVersion(), 3);
-    assert.equal(result.feedRequestResult.created, true);
+    assert.equal(result.created, true);
     assert.equal(eventStore.getFeedIntent(result.feedIntent.feedIntentId).status, "COMPLETED");
     assert.equal(eventStore.getEventIdByFeedIntent(result.feedIntent.feedIntentId),
-        result.feedRequestResult.feedRequest.eventId);
+        result.feedRequest.eventId);
     assert.equal(eventStore.getPersistenceDiagnostics().databaseType, "postgres");
 
     services.outboxWorker.stop();
