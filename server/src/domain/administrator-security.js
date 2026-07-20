@@ -159,6 +159,7 @@ export function createOperatorAuditRecord(input, {
         targetId: optionalText(input?.targetId, 256),
         reason: optionalText(input?.reason, 1000),
         requestId: optionalText(input?.requestId, 128),
+        approvalId: optionalText(input?.approvalId, 256),
         authenticationStrength: input?.authenticationStrength
             ? requireEnum(
                 input.authenticationStrength,

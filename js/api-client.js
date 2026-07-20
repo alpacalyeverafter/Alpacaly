@@ -77,11 +77,94 @@
             return this.request("/api/admin/session", { administrator: true });
         }
 
+        setDevelopmentAdministratorIdentity(identity) {
+            this.developmentAdministratorIdentity = identity
+                ? String(identity)
+                : null;
+        }
+
         listAdministratorFeedRequests(barnId, feederId) {
             return this.request(
                 `/api/admin/barns/${encodeURIComponent(barnId)}`
                 + `/feeders/${encodeURIComponent(feederId)}/feed-requests`,
                 { administrator: true }
+            );
+        }
+
+        listEmergencyStops(barnId) {
+            return this.request(
+                `/api/admin/safety/emergency-stops?barnId=${encodeURIComponent(barnId)}`,
+                { administrator: true }
+            );
+        }
+
+        activateEmergencyStop({ level, barnId, feederId, reason }) {
+            return this.request("/api/admin/safety/emergency-stops", {
+                method: "POST",
+                body: { level, barnId, feederId, reason },
+                administrator: true
+            });
+        }
+
+        requestEmergencyStopClear(emergencyStopId, reason) {
+            return this.request(
+                `/api/admin/safety/emergency-stops/${encodeURIComponent(emergencyStopId)}`
+                + "/clearance-requests",
+                {
+                    method: "POST",
+                    body: { reason },
+                    administrator: true
+                }
+            );
+        }
+
+        listApprovalRequests(barnId) {
+            return this.request(
+                `/api/admin/safety/approval-requests?barnId=${encodeURIComponent(barnId)}`,
+                { administrator: true }
+            );
+        }
+
+        decideApproval(approvalRequestId, decision, reason, authorityRepresented) {
+            return this.request(
+                `/api/admin/safety/approval-requests/${encodeURIComponent(approvalRequestId)}`
+                + "/decisions",
+                {
+                    method: "POST",
+                    body: { decision, reason, authorityRepresented },
+                    administrator: true
+                }
+            );
+        }
+
+        listResolutionCases(barnId) {
+            return this.request(
+                `/api/admin/safety/resolution-cases?barnId=${encodeURIComponent(barnId)}`,
+                { administrator: true }
+            );
+        }
+
+        requestOutcomeResolution(resolutionCaseId, resolution, reason, supportingNotes) {
+            return this.request(
+                `/api/admin/safety/resolution-cases/${encodeURIComponent(resolutionCaseId)}`
+                + "/resolution-requests",
+                {
+                    method: "POST",
+                    body: { resolution, reason, supportingNotes },
+                    administrator: true
+                }
+            );
+        }
+
+        requestReplacementCommand(resolutionCaseId, reason) {
+            return this.request(
+                `/api/admin/safety/resolution-cases/${encodeURIComponent(resolutionCaseId)}`
+                + "/replacement-requests",
+                {
+                    method: "POST",
+                    body: { reason },
+                    administrator: true
+                }
             );
         }
 

@@ -59,7 +59,12 @@ test("GET /api/event-engine/status reports safe queue totals", async () => {
         feedsRemaining: 100,
         feedingWindowEnforced: false,
         activeEvent: null,
-        lastUpdatedAt: null
+        lastUpdatedAt: null,
+        availability: {
+            available: true,
+            status: "AVAILABLE",
+            message: "Feeding is available."
+        }
     });
 });
 

@@ -542,6 +542,11 @@ export class SqliteEventStore {
             updateEventTimestamp: this.database.prepare(`
                 UPDATE Events SET updatedAt = ? WHERE eventId = ?
             `),
+            updateEventSafetyState: this.database.prepare(`
+                UPDATE Events
+                SET safetyState = ?, safetyUpdatedAt = ?, updatedAt = ?
+                WHERE eventId = ?
+            `),
             selectEvents: this.database.prepare(`
                 SELECT
                     eventId,
@@ -558,7 +563,9 @@ export class SqliteEventStore {
                     feederId,
                     queueId,
                     contributionId,
-                    feedIntentId
+                    feedIntentId,
+                    safetyState,
+                    safetyUpdatedAt
                 FROM Events
                 ORDER BY sequenceNumber ASC
             `),
@@ -1251,6 +1258,19 @@ export class SqliteEventStore {
         });
     }
 
+    setEventSafetyState(eventId, safetyState, timestamp) {
+        this.assertOpen();
+        const result = this.statements.updateEventSafetyState.run(
+            safetyState,
+            timestamp,
+            timestamp,
+            eventId
+        );
+        if (Number(result.changes) !== 1) {
+            throw new Error(`Persistent event ${eventId} was not found.`);
+        }
+    }
+
     loadState() {
         this.assertOpen();
         const historiesByEvent = new Map();
@@ -1297,6 +1317,9 @@ export class SqliteEventStore {
                 type: row.type,
                 state: row.currentState,
                 status: row.currentState,
+                lifecycleState: row.currentState,
+                safetyState: row.safetyState,
+                safetyUpdatedAt: row.safetyUpdatedAt,
                 sequenceNumber: row.sequenceNumber,
                 supporterName: row.supporterName,
                 source: row.source,
@@ -1327,6 +1350,9 @@ export class SqliteEventStore {
     clearAll() {
         this.transaction(() => {
             this.database.exec(`
+                DELETE FROM WelfareSafetyLedger;
+                DELETE FROM ApprovalDecisions;
+                DELETE FROM ApprovalRequestHistory;
                 DELETE FROM DeviceAcknowledgements;
                 DELETE FROM SimulatedDeviceExecutions;
                 DELETE FROM SimulatedDeviceFences;
@@ -1334,6 +1360,9 @@ export class SqliteEventStore {
                 DELETE FROM DeviceCommandHistory;
                 DELETE FROM DeviceCommandOutbox;
                 DELETE FROM DeviceCommands;
+                DELETE FROM OperatorResolutionCases;
+                DELETE FROM ApprovalRequests;
+                DELETE FROM EmergencyStops;
                 DELETE FROM AuditRecords;
                 DELETE FROM Events;
                 DELETE FROM FeedIntentHistory;
@@ -1341,6 +1370,9 @@ export class SqliteEventStore {
                 DELETE FROM FeedIntents;
                 DELETE FROM Contributions;
                 DELETE FROM ProviderEvents;
+                UPDATE Feeders
+                SET safetyStatus = 'ONLINE', safetyReason = NULL,
+                    safetyUpdatedAt = NULL;
             `);
         });
     }

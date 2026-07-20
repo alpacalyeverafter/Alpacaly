@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7B-1 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, immutable operator audit records, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
+This directory contains the Phase 7B-2 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
 
-## Phase 7B-1 boundaries
+## Phase 7B-2 boundaries
 
 Included:
 
@@ -46,6 +46,17 @@ Included:
 - Barn-scoped authorization with explicit platform-wide assignments
 - Protected administrator, queue-history, device-command, welfare, and reset APIs
 - Durable feeder pause/unavailable/maintenance and device pause/maintenance state
+- Durable platform, Barn, and Feeder emergency stops with hierarchical command gating
+- Restart-latched emergency stops and explicit safe supporter availability
+- Two-person emergency clearance with welfare/hardware authority separation
+- Two-platform-Administrator clearance for platform emergency stops
+- Fifteen-minute, append-only critical approval requests and decisions
+- Durable `OUTCOME_UNKNOWN` resolution cases that block only the affected feeder
+- Conservative uncertain-dispense welfare accounting
+- Dual-approved confirmed outcomes and welfare cancellation
+- Separately approved replacement dispense commands with new command IDs, links to the original command, and fresh welfare validation
+- Provider-neutral critical-authentication checks that require managed, strong authentication in production
+- Simple administrator safety panels for stops, approvals, and resolution cases
 - Public API presenters that omit supporter identity, Contribution data, lifecycle internals, and hardware details
 - REST polling fallback and automatic recovery after temporary server outages
 - Future-facing bell and dispensing acknowledgement records
@@ -60,7 +71,6 @@ Intentionally excluded:
 - Stripe or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
 - Real managed OpenID Connect provider integration, passwords, and production sessions
-- Dual approval, emergency stop, and manual `OUTCOME_UNKNOWN` resolution
 - Real hardware transports, feeder control, MQTT, GPIO, Raspberry Pi, or ESP32 integration
 - Camera integration or streaming
 - Live-video integration
@@ -100,6 +110,8 @@ The default server address is `http://localhost:3000`.
 | `ENABLE_DEMO_RESET` | development only | Enables the Reset Demo button and reset endpoint outside production. |
 | `ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION` | development only | Enables simulated WEBSITE Contributions and legacy write adapters. Always disabled when `NODE_ENV=production`. |
 | `ENABLE_DEVELOPMENT_AUTHENTICATION` | `false` | Explicitly enables server-controlled local administrator identities in development or test. It is always rejected in production. The example development environment enables it. |
+| `MANAGED_IDENTITY_PROVIDER_CONFIGURED` | `false` | Confirms that production critical actions are backed by a managed identity provider. Development identities never satisfy this production safeguard. |
+| `CRITICAL_APPROVAL_LIFETIME_MS` | `900000` | Maximum lifetime of a dual-approval request. It is bounded to 1–60 minutes and defaults to 15 minutes. |
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | Delay between background checks for durable FeedIntent work. |
 | `OUTBOX_RETRY_DELAY_MS` | `1000` | Delay before retrying a failed Outbox processing attempt. |
 | `DEVICE_COMMAND_POLL_INTERVAL_MS` | `100` | Delay between durable Device Command reconciliation passes. |
@@ -115,7 +127,15 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Existing Events, histories, commands, acknowledgements, queues, and contribution audit data are preserved. Commands are created only when Events enter or resume `BELL` and `DISPENSING`. The principal relationships are:
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Existing Events, histories, commands, acknowledgements, queues, contribution data, administrator assignments, and audit records are preserved in place. Commands are created only when Events enter or resume `BELL` and `DISPENSING`, or after a separately approved replacement request.
+
+## Operator safety flow
+
+Emergency-stop activation is immediate. A platform stop blocks every feeder, a Barn stop blocks that Barn, and a Feeder stop blocks only its feeder. Commands proven not to have started are cancelled. Sent or timed-out commands whose physical result cannot be proven become `OUTCOME_UNKNOWN`; dispense commands then create one durable resolution case, count the uncertain quantity conservatively, and block that feeder without automatic retry.
+
+Clearing a Feeder or Barn stop requires two distinct people who collectively hold current welfare and hardware authority. Clearing a platform stop requires two distinct platform Administrators. The requester cannot approve, decisions expire after 15 minutes, and current account status, role, Barn scope, and authentication strength are checked again at decision and execution time.
+
+An uncertain dispense may be resolved as `CONFIRMED_DISPENSED`, `CONFIRMED_NOT_DISPENSED`, `CANCELLED_FOR_WELFARE`, or `MANUAL_REVIEW_REQUIRED`. The first three require the same two-authority approval. Manual review keeps the case and feeder blocked. A confirmed-not-dispensed case does not retry automatically; a replacement requires a second dual-approval request, current welfare validation, and a new immutable command linked to both the original command and resolution case.
 
 ```sql
 CREATE TABLE Events (

@@ -118,6 +118,17 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
                 DEFAULTS.enableDevelopmentAuthentication,
                 "ENABLE_DEVELOPMENT_AUTHENTICATION"
             ),
+        managedIdentityProviderConfigured: parseBoolean(
+            env.MANAGED_IDENTITY_PROVIDER_CONFIGURED,
+            DEFAULTS.managedIdentityProviderConfigured,
+            "MANAGED_IDENTITY_PROVIDER_CONFIGURED"
+        ),
+        criticalApprovalLifetimeMs: parseInteger(
+            env.CRITICAL_APPROVAL_LIFETIME_MS,
+            DEFAULTS.criticalApprovalLifetimeMs,
+            "CRITICAL_APPROVAL_LIFETIME_MS",
+            { minimum: 60_000, maximum: 60 * 60 * 1000 }
+        ),
         outboxPollIntervalMs: parseInteger(
             env.OUTBOX_POLL_INTERVAL_MS,
             DEFAULTS.outboxPollIntervalMs,

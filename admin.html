@@ -63,6 +63,23 @@
             <div class="label">Recent Feed History</div>
             <ul id="feed-history-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 20px auto 0;"></ul>
         </section>
+
+        <section class="section" style="text-align: left;">
+            <div class="label">Operator Safety</div>
+            <div class="status-card" style="max-width: 1100px; margin: 12px auto;">
+                <strong>Emergency stop</strong>
+                <span>Immediately latch the default feeder. A reason and confirmation are required.</span>
+                <input id="emergency-stop-reason" type="text" maxlength="1000" placeholder="Reason for emergency stop" style="margin: 12px 0; padding: 10px; width: min(90%, 520px);">
+                <button id="activate-emergency-stop" class="button" type="button">Activate feeder emergency stop</button>
+            </div>
+            <div class="label">Active Emergency Stops</div>
+            <ul id="emergency-stop-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 20px;"></ul>
+            <div class="label">Pending Safety Approvals</div>
+            <ul id="approval-request-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 20px;"></ul>
+            <div class="label">Uncertain Outcome Cases</div>
+            <ul id="resolution-case-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 0;"></ul>
+            <p id="safety-action-status" role="status" style="max-width: 1100px; margin: 16px auto 0;"></p>
+        </section>
     </main>
 
     <script src="js/config.js"></script>

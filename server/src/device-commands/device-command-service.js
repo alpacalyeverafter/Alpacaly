@@ -14,7 +14,8 @@ export class DeviceCommandService {
         maximumAttempts = 3,
         clock = () => new Date(),
         idGenerator = randomUUID,
-        onCommandAcknowledged = () => {}
+        onCommandAcknowledged = () => {},
+        onCommandOutcomeUnknown = () => {}
     }) {
         this.deviceCommandStore = deviceCommandStore;
         this.eventStore = eventStore;
@@ -23,11 +24,17 @@ export class DeviceCommandService {
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.onCommandAcknowledged = onCommandAcknowledged;
+        this.onCommandOutcomeUnknown = onCommandOutcomeUnknown;
         this.worker = null;
+        this.safetyService = null;
     }
 
     setWorker(worker) {
         this.worker = worker;
+    }
+
+    setSafetyService(safetyService) {
+        this.safetyService = safetyService;
     }
 
     ensureCommandForEvent(feedRequest, commandType) {
@@ -45,6 +52,19 @@ export class DeviceCommandService {
         );
         if (existing) {
             return { command: existing, created: false };
+        }
+
+        if (this.safetyService?.isFeederBlocked(
+            feedRequest.feederId,
+            feedRequest.barnId
+        )) {
+            throw new ApplicationError(
+                "The feeder is blocked by an active safety condition.",
+                {
+                    code: "FEEDER_SAFETY_BLOCKED",
+                    statusCode: 409
+                }
+            );
         }
 
         const now = this.clock().toISOString();
@@ -92,6 +112,51 @@ export class DeviceCommandService {
         return result;
     }
 
+    createReplacementCommand({
+        originalCommand,
+        resolutionCase,
+        approvalRequestId,
+        welfareCheck
+    }) {
+        const existing = this.deviceCommandStore.getCommandsForEvent(
+            originalCommand.eventId
+        ).find(command => command.resolutionCaseId === resolutionCase.resolutionCaseId);
+        if (existing) {
+            return existing;
+        }
+        const now = this.clock().toISOString();
+        const command = createDeviceCommand({
+            eventId: originalCommand.eventId,
+            barnId: originalCommand.barnId,
+            feederId: originalCommand.feederId,
+            deviceId: originalCommand.deviceId,
+            commandType: "DISPENSE_FEED",
+            commandPayload: originalCommand.commandPayload,
+            idempotencyKey:
+                `${originalCommand.eventId}:DISPENSE_FEED:replacement:${resolutionCase.resolutionCaseId}`,
+            status: "PENDING",
+            maximumAttempts: this.maximumAttempts,
+            createdAt: now,
+            replacementOfCommandId: originalCommand.commandId,
+            resolutionCaseId: resolutionCase.resolutionCaseId
+        }, {
+            clock: this.clock,
+            idGenerator: this.idGenerator
+        });
+        const result = this.deviceCommandStore.createReplacementCommand(command);
+        this.logger.info({
+            event: "replacement_device_command_created",
+            commandId: result.command.commandId,
+            replacementOfCommandId: originalCommand.commandId,
+            resolutionCaseId: resolutionCase.resolutionCaseId,
+            approvalRequestId,
+            welfareCheck,
+            created: result.created
+        }, "Approved replacement DeviceCommand created");
+        this.worker?.processCommand(result.command.commandId);
+        return result.command;
+    }
+
     async executeEventAction(feedRequest, commandType, { signal } = {}) {
         if (!this.worker) {
             throw new Error("Device Command worker is not configured.");
@@ -130,6 +195,14 @@ export class DeviceCommandService {
 
     commandAcknowledged(payload) {
         this.onCommandAcknowledged(payload);
+    }
+
+    commandOutcomeUnknown(payload) {
+        this.onCommandOutcomeUnknown(payload);
+    }
+
+    setOutcomeUnknownHandler(handler) {
+        this.onCommandOutcomeUnknown = handler;
     }
 
     prepareForReset() {

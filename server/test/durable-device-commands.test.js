@@ -319,7 +319,7 @@ test("acknowledgements are durable, duplicate-safe, late-aware and order-aware",
     context.eventEngine.close();
 });
 
-test("late success can resolve OUTCOME_UNKNOWN but cannot revive FAILED commands", () => {
+test("late success preserves OUTCOME_UNKNOWN for operator resolution and cannot revive FAILED commands", () => {
     const context = createContext();
     const firstFeed = submit(context, "Late unknown supporter");
     const unknown = context.deviceCommands.deviceCommandService
@@ -335,7 +335,7 @@ test("late success can resolve OUTCOME_UNKNOWN but cannot revive FAILED commands
     const recovered = context.deviceCommands.acknowledgementService.record(
         acknowledgement(unknown, "SUCCEEDED", "ack-late-success")
     );
-    assert.equal(recovered.command.status, "ACKNOWLEDGED");
+    assert.equal(recovered.command.status, "OUTCOME_UNKNOWN");
     assert.equal(recovered.late, true);
 
     const secondFeed = submit(context, "Late failed supporter");

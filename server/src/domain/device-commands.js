@@ -122,7 +122,13 @@ export function createDeviceCommand(input, {
         ),
         failedAt: requireTimestamp(input?.failedAt, "failedAt", { nullable: true }),
         lastError: input?.lastError ? String(input.lastError).slice(0, 1000) : null,
-        updatedAt: requireTimestamp(input?.updatedAt || now, "updatedAt")
+        updatedAt: requireTimestamp(input?.updatedAt || now, "updatedAt"),
+        replacementOfCommandId: input?.replacementOfCommandId
+            ? requireText(input.replacementOfCommandId, "replacementOfCommandId")
+            : null,
+        resolutionCaseId: input?.resolutionCaseId
+            ? requireText(input.resolutionCaseId, "resolutionCaseId")
+            : null
     });
 }
 

@@ -39,7 +39,9 @@ function mapCommand(row) {
         completedAt: row.completedAt,
         failedAt: row.failedAt,
         lastError: row.lastError,
-        updatedAt: row.updatedAt
+        updatedAt: row.updatedAt,
+        replacementOfCommandId: row.replacementOfCommandId,
+        resolutionCaseId: row.resolutionCaseId
     } : null;
 }
 
@@ -92,6 +94,17 @@ export class SqliteDeviceCommandStore {
                 SELECT *
                 FROM DeviceCommands
                 WHERE eventId = ? AND commandType = ?
+                ORDER BY commandSequence DESC
+                LIMIT 1
+            `),
+            selectOriginalCommandByEventAction: this.database.prepare(`
+                SELECT *
+                FROM DeviceCommands
+                WHERE eventId = ? AND commandType = ?
+                  AND replacementOfCommandId IS NULL
+            `),
+            selectCommandByResolutionCase: this.database.prepare(`
+                SELECT * FROM DeviceCommands WHERE resolutionCaseId = ?
             `),
             selectDeviceOperationalStatus: this.database.prepare(`
                 SELECT operationalStatus, operationalReason, operationalUpdatedAt
@@ -125,8 +138,10 @@ export class SqliteDeviceCommandStore {
                     completedAt,
                     failedAt,
                     lastError,
-                    updatedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    updatedAt,
+                    replacementOfCommandId,
+                    resolutionCaseId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `),
             updateCommand: this.database.prepare(`
                 UPDATE DeviceCommands
@@ -325,17 +340,15 @@ export class SqliteDeviceCommandStore {
     }
 
     createCommand(command) {
-        const existing = this.getCommandForEventAction(
-            command.eventId,
-            command.commandType
-        );
+        const existing = mapCommand(this.statements.selectOriginalCommandByEventAction
+            .get(command.eventId, command.commandType));
         if (existing) {
             return { command: existing, created: false };
         }
 
         return this.eventStore.transaction(() => {
             const concurrent = mapCommand(
-                this.statements.selectCommandByEventAction.get(
+                this.statements.selectOriginalCommandByEventAction.get(
                     command.eventId,
                     command.commandType
                 )
@@ -383,6 +396,67 @@ export class SqliteDeviceCommandStore {
         });
     }
 
+    createReplacementCommand(command) {
+        const existing = command.resolutionCaseId
+            ? mapCommand(this.statements.selectCommandByResolutionCase.get(
+                command.resolutionCaseId
+            ))
+            : null;
+        if (existing) {
+            return { command: existing, created: false };
+        }
+        return this.eventStore.transaction(() => {
+            const concurrent = command.resolutionCaseId
+                ? mapCommand(this.statements.selectCommandByResolutionCase.get(
+                    command.resolutionCaseId
+                ))
+                : null;
+            if (concurrent) {
+                return { command: concurrent, created: false };
+            }
+            const fencingToken = Number(
+                this.statements.selectMaximumFencingToken.get(command.feederId)
+                    .maximumToken
+            ) + 1;
+            const persisted = {
+                ...command,
+                fencingToken,
+                status: "READY",
+                nextAttemptAt: command.createdAt,
+                updatedAt: command.createdAt
+            };
+            this.insertCommand(persisted);
+            this.statements.insertOutbox.run(
+                persisted.commandId,
+                "PENDING",
+                persisted.nextAttemptAt,
+                null,
+                null,
+                persisted.createdAt,
+                persisted.updatedAt
+            );
+            this.insertStateChange(
+                persisted.commandId,
+                null,
+                "PENDING",
+                persisted.createdAt,
+                {
+                    idempotencyKey: persisted.idempotencyKey,
+                    replacementOfCommandId: persisted.replacementOfCommandId,
+                    resolutionCaseId: persisted.resolutionCaseId
+                }
+            );
+            this.insertStateChange(
+                persisted.commandId,
+                "PENDING",
+                "READY",
+                persisted.createdAt,
+                { outbox: "QUEUED", approvedReplacement: true }
+            );
+            return { command: { ...persisted }, created: true };
+        });
+    }
+
     insertCommand(command) {
         this.statements.insertCommand.run(
             command.commandId,
@@ -405,7 +479,9 @@ export class SqliteDeviceCommandStore {
             command.completedAt,
             command.failedAt,
             command.lastError,
-            command.updatedAt
+            command.updatedAt,
+            command.replacementOfCommandId,
+            command.resolutionCaseId
         );
     }
 

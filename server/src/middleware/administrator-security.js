@@ -14,7 +14,8 @@ export function authorizeAdministrator({
     auditService,
     permission,
     resolveContext = () => ({}),
-    platformWide = false
+    platformWide = false,
+    rejectionAction = "UNAUTHORIZED_ACTION_REJECTED"
 }) {
     return function authorize(req, _res, next) {
         let context = {};
@@ -32,7 +33,7 @@ export function authorizeAdministrator({
                 barnId: context.barnId || null,
                 feederId: context.feederId || null,
                 deviceId: context.deviceId || null,
-                action: "UNAUTHORIZED_ACTION_REJECTED",
+                action: rejectionAction,
                 targetType: context.targetType || "ADMINISTRATOR_API",
                 targetId: context.targetId || null,
                 reason: error.code || "AUTHORIZATION_FAILED",

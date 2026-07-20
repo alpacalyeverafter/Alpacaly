@@ -18,6 +18,8 @@ export const testConfig = Object.freeze({
     enableDemoReset: true,
     enableDevelopmentContributionSimulation: true,
     enableDevelopmentAuthentication: true,
+    managedIdentityProviderConfigured: false,
+    criticalApprovalLifetimeMs: 15 * 60 * 1000,
     outboxPollIntervalMs: 250,
     outboxRetryDelayMs: 0,
     deviceCommandPollIntervalMs: 10,

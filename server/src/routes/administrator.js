@@ -86,12 +86,14 @@ export function createAdministratorRouter({
     eventEngine,
     config,
     administratorSecurityServices,
-    deviceCommandServices
+    deviceCommandServices,
+    operatorSafetyServices
 }) {
     const router = Router();
     const services = administratorSecurityServices;
     const store = services.store;
     const operations = services.resourceOperationsService;
+    const safety = operatorSafetyServices;
 
     router.get("/session", (req, res) => {
         const identity = req.administratorIdentity;
@@ -673,6 +675,231 @@ export function createAdministratorRouter({
                 },
                 requestId: req.requestId
             });
+        }
+    );
+
+    router.get(
+        "/safety/emergency-stops",
+        authorize(services, PERMISSIONS.VIEW_BARN_STATUS, req => ({
+            barnId: req.query.barnId || null,
+            targetType: "EMERGENCY_STOP"
+        })),
+        (req, res) => {
+            res.status(200).json({
+                emergencyStops: safety.emergencyStopService.getActiveStops({
+                    barnId: req.query.barnId || null,
+                    feederId: req.query.feederId || null
+                }),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.post(
+        "/safety/emergency-stops",
+        authorize(services, PERMISSIONS.ACTIVATE_EMERGENCY_STOP, req => ({
+            barnId: req.body?.barnId || null,
+            feederId: req.body?.feederId || null,
+            targetType: "EMERGENCY_STOP"
+        }), {
+            rejectionAction: "EMERGENCY_STOP_ACTIVATION_REJECTED"
+        }),
+        (req, res, next) => {
+            try {
+                const emergencyStop = safety.emergencyStopService.activate(
+                    req.body,
+                    actionContext(req)
+                );
+                res.status(201).json({ emergencyStop, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/safety/emergency-stops/:emergencyStopId/clearance-requests",
+        authorize(services, PERMISSIONS.REQUEST_EMERGENCY_STOP_CLEAR, req => {
+            const stop = safety.store.getEmergencyStop(req.params.emergencyStopId);
+            return {
+                barnId: stop?.barnId || null,
+                feederId: stop?.feederId || null,
+                targetType: "EMERGENCY_STOP",
+                targetId: req.params.emergencyStopId
+            };
+        }),
+        (req, res, next) => {
+            try {
+                const approvalRequest = safety.emergencyStopService.requestClear(
+                    req.params.emergencyStopId,
+                    req.body,
+                    actionContext(req)
+                );
+                res.status(202).json({ approvalRequest, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/safety/approval-requests",
+        authorize(services, PERMISSIONS.VIEW_AUDIT_HISTORY, req => ({
+            barnId: req.query.barnId || null,
+            targetType: "APPROVAL_REQUEST"
+        })),
+        (req, res) => {
+            res.status(200).json({
+                approvalRequests: safety.approvalService.getRequests({
+                    status: req.query.status || null,
+                    barnId: req.query.barnId || null
+                }),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.get(
+        "/safety/approval-requests/:approvalRequestId",
+        authorize(services, PERMISSIONS.VIEW_AUDIT_HISTORY, req => {
+            const approval = safety.store.getApprovalRequest(
+                req.params.approvalRequestId
+            );
+            return {
+                barnId: approval?.barnId || null,
+                feederId: approval?.feederId || null,
+                targetType: "APPROVAL_REQUEST",
+                targetId: req.params.approvalRequestId
+            };
+        }),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    approvalRequest: safety.approvalService.getRequest(
+                        req.params.approvalRequestId
+                    ),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/safety/approval-requests/:approvalRequestId/decisions",
+        authorize(services, PERMISSIONS.APPROVE_CRITICAL_ACTION, req => {
+            const approval = safety.store.getApprovalRequest(
+                req.params.approvalRequestId
+            );
+            return {
+                barnId: approval?.barnId || null,
+                feederId: approval?.feederId || null,
+                targetType: "APPROVAL_REQUEST",
+                targetId: req.params.approvalRequestId
+            };
+        }),
+        (req, res, next) => {
+            try {
+                const approvalRequest = safety.approvalService.decide(
+                    req.params.approvalRequestId,
+                    req.body,
+                    actionContext(req)
+                );
+                res.status(200).json({ approvalRequest, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/safety/resolution-cases",
+        authorize(services, PERMISSIONS.VIEW_COMMAND_HISTORY, req => ({
+            barnId: req.query.barnId || null,
+            feederId: req.query.feederId || null,
+            targetType: "OPERATOR_RESOLUTION_CASE"
+        })),
+        (req, res) => {
+            res.status(200).json({
+                resolutionCases: safety.operatorResolutionService.getCases({
+                    status: req.query.status || null,
+                    barnId: req.query.barnId || null,
+                    feederId: req.query.feederId || null
+                }),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.post(
+        "/safety/resolution-cases/:resolutionCaseId/resolution-requests",
+        authorize(services, PERMISSIONS.RESOLVE_UNCERTAIN_OUTCOME, req => {
+            const resolutionCase = safety.store.getResolutionCase(
+                req.params.resolutionCaseId
+            );
+            return {
+                barnId: resolutionCase?.barnId || null,
+                feederId: resolutionCase?.feederId || null,
+                targetType: "OPERATOR_RESOLUTION_CASE",
+                targetId: req.params.resolutionCaseId
+            };
+        }),
+        (req, res, next) => {
+            try {
+                const result = safety.operatorResolutionService.requestResolution(
+                    req.params.resolutionCaseId,
+                    req.body,
+                    actionContext(req)
+                );
+                res.status(202).json({ ...result, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/safety/resolution-cases/:resolutionCaseId/replacement-requests",
+        authorize(services, PERMISSIONS.REQUEST_REPLACEMENT_COMMAND, req => {
+            const resolutionCase = safety.store.getResolutionCase(
+                req.params.resolutionCaseId
+            );
+            return {
+                barnId: resolutionCase?.barnId || null,
+                feederId: resolutionCase?.feederId || null,
+                targetType: "OPERATOR_RESOLUTION_CASE",
+                targetId: req.params.resolutionCaseId
+            };
+        }),
+        (req, res, next) => {
+            try {
+                const approvalRequest = safety.operatorResolutionService
+                    .requestReplacement(
+                        req.params.resolutionCaseId,
+                        req.body,
+                        actionContext(req)
+                    );
+                res.status(202).json({ approvalRequest, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/safety/audit-records",
+        authorize(services, PERMISSIONS.VIEW_AUDIT_HISTORY, req => ({
+            barnId: req.query.barnId || null,
+            targetType: "OPERATOR_SAFETY_AUDIT"
+        })),
+        (req, res) => {
+            const safetyAction = /EMERGENCY|APPROVAL|OUTCOME_UNKNOWN|REPLACEMENT|WELFARE_CANCEL/i;
+            const auditRecords = store.getAuditRecords({
+                barnId: req.query.barnId || null,
+                limit: req.query.limit || 500
+            }).filter(record => safetyAction.test(record.action));
+            res.status(200).json({ auditRecords, requestId: req.requestId });
         }
     );
 

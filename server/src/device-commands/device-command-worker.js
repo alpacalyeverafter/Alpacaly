@@ -32,7 +32,8 @@ export class DeviceCommandWorker {
         pollIntervalMs = 100,
         acknowledgementTimeoutMs = 5000,
         retryDelayMs = 1000,
-        sleep = wait
+        sleep = wait,
+        onOutcomeUnknown = () => {}
     }) {
         this.deviceCommandStore = deviceCommandStore;
         this.deviceAdapter = deviceAdapter;
@@ -43,6 +44,8 @@ export class DeviceCommandWorker {
         this.acknowledgementTimeoutMs = acknowledgementTimeoutMs;
         this.retryDelayMs = retryDelayMs;
         this.sleep = sleep;
+        this.onOutcomeUnknown = onOutcomeUnknown;
+        this.safetyService = null;
         this.started = false;
         this.timer = null;
         this.processingPoll = false;
@@ -59,6 +62,7 @@ export class DeviceCommandWorker {
         }
         this.deviceAdapter.start();
         this.started = true;
+        this.reconcileOutcomeUnknownCommands();
         void this.reconcileOutstanding({ force: true });
         void this.processReadyCommands();
         this.scheduleNextPoll();
@@ -80,6 +84,10 @@ export class DeviceCommandWorker {
         this.abortController = new AbortController();
     }
 
+    setSafetyService(safetyService) {
+        this.safetyService = safetyService;
+    }
+
     processCommand(commandId, { forceReconcile = false } = {}) {
         const existing = this.inFlight.get(commandId);
         if (existing) {
@@ -98,6 +106,9 @@ export class DeviceCommandWorker {
         if (!command || isTerminalDeviceCommandState(command.status)) {
             return command;
         }
+        if (!this.commandMayProgress(command)) {
+            return command;
+        }
         if (command.status === "PENDING") {
             command = this.deviceCommandStore.transitionCommand(commandId, "READY", {
                 timestamp: this.clock().toISOString(),
@@ -109,6 +120,9 @@ export class DeviceCommandWorker {
             return this.reconcileCommand(command, { force: forceReconcile });
         }
         if (!["READY", "RETRY_SCHEDULED"].includes(command.status)) {
+            return command;
+        }
+        if (!this.commandMayProgress(command)) {
             return command;
         }
         if (
@@ -154,15 +168,11 @@ export class DeviceCommandWorker {
             if (error?.deliveryOutcome === "CONFIRMED_NOT_PROCESSED") {
                 return this.scheduleRetryOrFailure(commandId, error);
             }
-            return this.deviceCommandStore.transitionCommand(
-                commandId,
-                "OUTCOME_UNKNOWN",
-                {
-                    timestamp: this.clock().toISOString(),
-                    lastError: String(error?.message || error),
-                    details: { deliveryOutcome: "UNKNOWN" }
-                }
-            );
+            return this.markOutcomeUnknown(commandId, {
+                timestamp: this.clock().toISOString(),
+                lastError: String(error?.message || error),
+                details: { deliveryOutcome: "UNKNOWN" }
+            });
         }
         return this.deviceCommandStore.getCommand(commandId);
     }
@@ -208,21 +218,20 @@ export class DeviceCommandWorker {
                     }
                 );
             }
-            return this.deviceCommandStore.transitionCommand(
-                command.commandId,
-                "OUTCOME_UNKNOWN",
-                {
-                    timestamp: now.toISOString(),
-                    lastError: "Device could not confirm whether the action occurred",
-                    details: { reconciliationOutcome: "UNKNOWN" }
-                }
-            );
+            return this.markOutcomeUnknown(command.commandId, {
+                timestamp: now.toISOString(),
+                lastError: "Device could not confirm whether the action occurred",
+                details: { reconciliationOutcome: "UNKNOWN" }
+            });
         }
         return command;
     }
 
     scheduleRetryOrFailure(commandId, error) {
         const command = this.deviceCommandStore.getCommand(commandId);
+        if (!command || isTerminalDeviceCommandState(command.status)) {
+            return command;
+        }
         const timestamp = this.clock();
         const message = String(error?.message || error || "Device delivery failed")
             .slice(0, 1000);
@@ -252,6 +261,31 @@ export class DeviceCommandWorker {
                 }
             }
         );
+    }
+
+    markOutcomeUnknown(commandId, options) {
+        const command = this.deviceCommandStore.transitionCommand(
+            commandId,
+            "OUTCOME_UNKNOWN",
+            options
+        );
+        this.onOutcomeUnknown(command);
+        return command;
+    }
+
+    commandMayProgress(command) {
+        if (!this.safetyService) {
+            return true;
+        }
+        try {
+            this.safetyService.assertCommandMayProgress(command);
+            return true;
+        } catch (error) {
+            if (error?.code === "FEEDER_SAFETY_BLOCKED") {
+                return false;
+            }
+            throw error;
+        }
     }
 
     async driveCommandToResolution(commandId, { signal } = {}) {
@@ -304,6 +338,7 @@ export class DeviceCommandWorker {
         }
         this.processingPoll = true;
         try {
+            this.reconcileOutcomeUnknownCommands();
             const commands = this.deviceCommandStore.getDeliverableCommands(
                 this.clock().toISOString()
             );
@@ -313,6 +348,12 @@ export class DeviceCommandWorker {
         } finally {
             this.processingPoll = false;
         }
+    }
+
+    reconcileOutcomeUnknownCommands() {
+        this.deviceCommandStore.getAllCommands()
+            .filter(command => command.status === "OUTCOME_UNKNOWN")
+            .forEach(command => this.onOutcomeUnknown(command));
     }
 
     async reconcileOutstanding({ force = false } = {}) {

@@ -65,6 +65,54 @@ test("browser API client sends only the configured development identity to admin
     assert.equal(capturedRequests[2].options.headers.authorization, undefined);
 });
 
+test("browser API client sends protected operator-safety actions to dedicated administrator APIs", async () => {
+    const capturedRequests = [];
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        developmentAdministratorIdentity: "local-welfare",
+        fetchImpl: async (url, options) => {
+            capturedRequests.push({ url, options });
+            return jsonResponse({ emergencyStops: [], approvalRequests: [] });
+        }
+    });
+
+    await client.listEmergencyStops("barn-default");
+    await client.activateEmergencyStop({
+        level: "FEEDER",
+        barnId: "barn-default",
+        feederId: "feeder-default",
+        reason: "Safety test"
+    });
+    await client.decideApproval(
+        "approval-1",
+        "APPROVE",
+        "Evidence checked",
+        "WELFARE"
+    );
+
+    assert.equal(
+        capturedRequests[0].url,
+        "http://localhost:3000/api/admin/safety/emergency-stops?barnId=barn-default"
+    );
+    assert.equal(capturedRequests[1].options.method, "POST");
+    assert.deepEqual(JSON.parse(capturedRequests[1].options.body), {
+        level: "FEEDER",
+        barnId: "barn-default",
+        feederId: "feeder-default",
+        reason: "Safety test"
+    });
+    assert.equal(
+        capturedRequests[2].url,
+        "http://localhost:3000/api/admin/safety/approval-requests/approval-1/decisions"
+    );
+    capturedRequests.forEach(captured => {
+        assert.equal(
+            captured.options.headers.authorization,
+            "Development local-welfare"
+        );
+    });
+});
+
 test("browser API client cannot authenticate admin calls without a configured identity", async () => {
     let capturedAuthorization = "not-called";
     const client = new AlpacalyApiClient({
@@ -197,6 +245,84 @@ test("browser Event Engine adapter maps server snapshots into the existing UI st
         backendAvailable: true,
         error: null
     });
+});
+
+test("browser Event Engine adapter displays only the safe unavailable message", async () => {
+    const apiClient = {
+        async getEventEngineStatus() {
+            return {
+                eventEngine: {
+                    status: "TEMPORARILY_UNAVAILABLE",
+                    queueSize: 1,
+                    acceptedToday: 1,
+                    completedFeeds: 0,
+                    feedsRemaining: 99,
+                    availability: {
+                        available: false,
+                        status: "TEMPORARILY_UNAVAILABLE",
+                        message: "Feeding is temporarily unavailable. Please try again later."
+                    }
+                }
+            };
+        }
+    };
+    const eventEngine = new ServerEventEngine(
+        browserConfig,
+        apiClient,
+        { autoStart: false }
+    );
+
+    await eventEngine.refreshStatus();
+    const state = eventEngine.getState();
+    assert.equal(state.status, "TEMPORARILY_UNAVAILABLE");
+    assert.equal(
+        state.message,
+        "Feeding is temporarily unavailable. Please try again later."
+    );
+    assert.equal(state.backendAvailable, true);
+    assert.equal(state.emergencyStopId, undefined);
+});
+
+test("a queued supporter still sees the safe unavailable message during a stop", async () => {
+    const availability = {
+        available: false,
+        status: "TEMPORARILY_UNAVAILABLE",
+        message: "Feeding is temporarily unavailable. Please try again later."
+    };
+    const apiClient = {
+        async createFeedRequest(payload) {
+            return {
+                feedRequest: {
+                    eventId: "feed-safely-queued",
+                    supporterName: payload.supporterName,
+                    state: "QUEUED",
+                    queuePosition: 1,
+                    estimatedWaitMs: 0
+                },
+                eventEngine: {
+                    status: "TEMPORARILY_UNAVAILABLE",
+                    queueSize: 1,
+                    acceptedToday: 1,
+                    completedFeeds: 0,
+                    feedsRemaining: 99,
+                    availability
+                }
+            };
+        }
+    };
+    const eventEngine = new ServerEventEngine(
+        browserConfig,
+        apiClient,
+        { autoStart: false }
+    );
+    const result = await eventEngine.submitEvent({
+        id: "browser-safety-request",
+        supporterName: "Safety supporter",
+        source: "website"
+    });
+
+    assert.equal(result.accepted, true);
+    assert.equal(eventEngine.getState().message, availability.message);
 });
 
 test("browser Event Engine adapter submits through the API instead of a local queue", async () => {

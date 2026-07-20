@@ -222,10 +222,13 @@
 
             const status = snapshot.status || "READY";
             const defaultMessage = this.getLifecycleMessage(status, snapshot);
+            const safetyMessage = snapshot.availability?.available === false
+                ? snapshot.availability.message
+                : null;
 
             this.setState({
                 status,
-                message: message || defaultMessage,
+                message: safetyMessage || message || defaultMessage,
                 currentEvent: snapshot.activeEvent
                     ? { ...snapshot.activeEvent }
                     : null,

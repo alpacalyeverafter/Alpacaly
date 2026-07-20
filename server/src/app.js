@@ -10,6 +10,7 @@ import { createLogger } from "./logging/logger.js";
 import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { requestLogger } from "./middleware/request-logger.js";
 import { authenticateAdministrator } from "./middleware/administrator-security.js";
+import { createOperatorSafetyServices } from "./operator-safety/index.js";
 import { createAdministratorRouter } from "./routes/administrator.js";
 import { createEventEngineRouter } from "./routes/event-engine.js";
 import { createDevelopmentContributionsRouter } from "./routes/development-contributions.js";
@@ -27,7 +28,7 @@ export function createApp(options = {}) {
             config,
             logger,
             clock: eventEngine.clock,
-            startWorker: true
+            startWorker: false
         });
     const contributionLedgerServices = options.contributionLedgerServices
         || createContributionLedgerServices({
@@ -45,6 +46,17 @@ export function createApp(options = {}) {
             config,
             clock: eventEngine.clock
         });
+    const operatorSafetyServices = options.operatorSafetyServices
+        || createOperatorSafetyServices({
+            eventEngine,
+            deviceCommandServices,
+            administratorSecurityServices,
+            config,
+            clock: eventEngine.clock
+        });
+    if (!options.deviceCommandServices) {
+        deviceCommandServices.worker.start();
+    }
     const app = express();
 
     app.disable("x-powered-by");
@@ -54,6 +66,7 @@ export function createApp(options = {}) {
     app.locals.deviceCommandServices = deviceCommandServices;
     app.locals.contributionLedgerServices = contributionLedgerServices;
     app.locals.administratorSecurityServices = administratorSecurityServices;
+    app.locals.operatorSafetyServices = operatorSafetyServices;
 
     app.use(cors({
         origin: config.corsOrigin,
@@ -90,7 +103,8 @@ export function createApp(options = {}) {
         eventEngine,
         config,
         administratorSecurityServices,
-        deviceCommandServices
+        deviceCommandServices,
+        operatorSafetyServices
     }));
     app.use("/api/event-engine", createEventEngineRouter({
         eventEngine,

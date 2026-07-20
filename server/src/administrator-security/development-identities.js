@@ -26,6 +26,28 @@ export const DEVELOPMENT_IDENTITIES = Object.freeze([
         createdAt: CREATED_AT
     }),
     Object.freeze({
+        credential: "local-admin-secondary",
+        administratorId: "administrator_development_platform_admin_secondary",
+        externalIdentityId: "development:local-admin-secondary",
+        displayName: "Secondary Platform Administrator",
+        email: "local-admin-secondary@development.alpacaly.invalid",
+        role: "ADMINISTRATOR",
+        platformWide: true,
+        barnId: null,
+        createdAt: CREATED_AT
+    }),
+    Object.freeze({
+        credential: "local-admin-tertiary",
+        administratorId: "administrator_development_platform_admin_tertiary",
+        externalIdentityId: "development:local-admin-tertiary",
+        displayName: "Tertiary Platform Administrator",
+        email: "local-admin-tertiary@development.alpacaly.invalid",
+        role: "ADMINISTRATOR",
+        platformWide: true,
+        barnId: null,
+        createdAt: CREATED_AT
+    }),
+    Object.freeze({
         credential: "local-welfare",
         administratorId: "administrator_development_welfare_operator",
         externalIdentityId: "development:local-welfare",

@@ -82,6 +82,7 @@ export class EventEngine {
         });
         this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
         this.deviceCommandService = null;
+        this.safetyService = null;
 
         this.feedRequests = new Map();
         this.queueRuntimes = new FeederQueueManager(
@@ -284,8 +285,11 @@ export class EventEngine {
 
         const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
         const queueIndex = queueRuntime.eventIds.indexOf(id);
+        const presentedState = feedRequest.safetyState || feedRequest.state;
         return {
             ...this.cloneFeedRequest(feedRequest),
+            state: presentedState,
+            status: presentedState,
             queuePosition: queueIndex >= 0 ? queueIndex + 1 : null,
             estimatedWaitMs: queueIndex >= 0
                 ? this.estimateWaitForQueueIndex(queueIndex, feedRequest.feederId)
@@ -336,7 +340,17 @@ export class EventEngine {
                     feedRequest ? this.estimateRemainingLifecycleMs(feedRequest) : 0
                 );
             }, 0),
-            activeEvent: activeEvent ? this.summarizeFeedRequest(activeEvent) : null
+            activeEvent: activeEvent ? this.summarizeFeedRequest(activeEvent) : null,
+            availability: this.safetyService
+                ? this.safetyService.getSafeAvailability(feederId)
+                : {
+                    available: this.isFeederProcessingAvailable(feederId),
+                    status: this.isFeederProcessingAvailable(feederId)
+                        ? "AVAILABLE" : "TEMPORARILY_UNAVAILABLE",
+                    message: this.isFeederProcessingAvailable(feederId)
+                        ? "Feeding is available."
+                        : "Feeding is temporarily unavailable. Please try again later."
+                }
         };
     }
 
@@ -352,6 +366,10 @@ export class EventEngine {
 
     setDeviceCommandService(deviceCommandService) {
         this.deviceCommandService = deviceCommandService;
+    }
+
+    setSafetyService(safetyService) {
+        this.safetyService = safetyService;
     }
 
     subscribe(listener) {
@@ -494,7 +512,17 @@ export class EventEngine {
             ),
             feedingWindowEnforced: this.config.enforceFeedingWindow,
             activeEvent: activeEvent ? this.summarizeFeedRequest(activeEvent) : null,
-            lastUpdatedAt: this.lastUpdatedAt
+            lastUpdatedAt: this.lastUpdatedAt,
+            availability: this.safetyService
+                ? this.safetyService.getSafeAvailability(queueRuntime.feederId)
+                : {
+                    available: this.isFeederProcessingAvailable(queueRuntime.feederId),
+                    status: this.isFeederProcessingAvailable(queueRuntime.feederId)
+                        ? "AVAILABLE" : "TEMPORARILY_UNAVAILABLE",
+                    message: this.isFeederProcessingAvailable(queueRuntime.feederId)
+                        ? "Feeding is available."
+                        : "Feeding is temporarily unavailable. Please try again later."
+                }
         };
     }
 
@@ -622,6 +650,10 @@ export class EventEngine {
                 return false;
             }
 
+            if (!this.isFeederProcessingAvailable(feedRequest.feederId)) {
+                return false;
+            }
+
             this.transitionTo(feedRequest, "BELL", {
                 mode: "SIMULATED_DEVICE_COMMAND",
                 commandType: "RING_BELL",
@@ -646,6 +678,10 @@ export class EventEngine {
                 "RING_BELL",
                 { signal: this.lifecycleAbortController.signal }
             )) {
+                return false;
+            }
+
+            if (!this.isFeederProcessingAvailable(feedRequest.feederId)) {
                 return false;
             }
 
@@ -903,7 +939,10 @@ export class EventEngine {
                 this.clientRequestIds.set(feedRequest.clientRequestId, feedRequest.eventId);
             }
 
-            if (feedRequest.state === "ARCHIVED") {
+            if (
+                feedRequest.state === "ARCHIVED"
+                || feedRequest.safetyState === "CANCELLED_FOR_WELFARE"
+            ) {
                 this.requireQueueRuntime(feedRequest.feederId)
                     .archivedEventIds.push(feedRequest.eventId);
                 this.processedEventIds.add(feedRequest.eventId);
@@ -926,7 +965,10 @@ export class EventEngine {
                 );
             }
 
-            if (feedRequest.state === "ARCHIVED") {
+            if (
+                feedRequest.state === "ARCHIVED"
+                || feedRequest.safetyState === "CANCELLED_FOR_WELFARE"
+            ) {
                 this.eventStore.removeFromQueue(queueEntry.eventId);
                 return;
             }
@@ -1105,8 +1147,10 @@ export class EventEngine {
     }
 
     isFeederProcessingAvailable(feederId) {
-        return this.eventStore.getFeederOperationalStatus(feederId)
-            ?.operationalStatus === "AVAILABLE";
+        const operationallyAvailable = this.eventStore
+            .getFeederOperationalStatus(feederId)?.operationalStatus === "AVAILABLE";
+        return operationallyAvailable
+            && (!this.safetyService || this.safetyService.canProcessFeeder(feederId));
     }
 
     getFeederDisplayStatus(queueRuntime, activeEvent) {
@@ -1115,6 +1159,12 @@ export class EventEngine {
         );
         if (operational && operational.operationalStatus !== "AVAILABLE") {
             return operational.operationalStatus;
+        }
+        const safety = this.safetyService?.store.getFeederSafety(
+            queueRuntime.feederId
+        );
+        if (safety && safety.safetyStatus !== "ONLINE") {
+            return safety.safetyStatus;
         }
         return activeEvent
             ? activeEvent.state
@@ -1157,8 +1207,10 @@ export class EventEngine {
             barnId: feedRequest.barnId,
             feederId: feedRequest.feederId,
             queueId: feedRequest.queueId,
-            state: feedRequest.state,
-            status: feedRequest.status,
+            state: feedRequest.safetyState || feedRequest.state,
+            status: feedRequest.safetyState || feedRequest.status,
+            lifecycleState: feedRequest.state,
+            safetyState: feedRequest.safetyState || null,
             sequenceNumber: feedRequest.sequenceNumber,
             requestedAt: feedRequest.requestedAt,
             updatedAt: feedRequest.updatedAt,
@@ -1175,6 +1227,53 @@ export class EventEngine {
 
     cloneFeedRequest(feedRequest) {
         return clone(feedRequest);
+    }
+
+    cancelForWelfare(eventId, details = {}) {
+        const feedRequest = this.feedRequests.get(eventId);
+        if (!feedRequest) {
+            throw new ApplicationError("Feed request not found.", {
+                code: "FEED_REQUEST_NOT_FOUND",
+                statusCode: 404
+            });
+        }
+        if (feedRequest.safetyState === "CANCELLED_FOR_WELFARE") {
+            return this.getFeedRequest(eventId);
+        }
+        const timestamp = this.clock().toISOString();
+        this.eventStore.setEventSafetyState(
+            eventId,
+            "CANCELLED_FOR_WELFARE",
+            timestamp
+        );
+        feedRequest.safetyState = "CANCELLED_FOR_WELFARE";
+        feedRequest.safetyUpdatedAt = timestamp;
+        feedRequest.updatedAt = timestamp;
+        const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+        const queueIndex = queueRuntime.eventIds.indexOf(eventId);
+        if (queueIndex >= 0) {
+            this.eventStore.removeFromQueue(eventId);
+            queueRuntime.eventIds.splice(queueIndex, 1);
+        }
+        this.processingEventIds.delete(eventId);
+        this.processedEventIds.add(eventId);
+        if (!queueRuntime.archivedEventIds.includes(eventId)) {
+            queueRuntime.archivedEventIds.push(eventId);
+        }
+        if (queueRuntime.activeEventId === eventId) {
+            queueRuntime.activeEventId = null;
+        }
+        this.emit({
+            type: "FEED_REQUEST_SAFETY_CANCELLED",
+            eventId,
+            state: "CANCELLED_FOR_WELFARE",
+            timestamp,
+            reason: details.reason,
+            feedRequest: this.summarizeFeedRequest(feedRequest),
+            eventEngine: this.getSnapshot()
+        });
+        this.scheduleProcessing(feedRequest.feederId);
+        return this.getFeedRequest(eventId);
     }
 
     emitTransition(feedRequest, timelineEntry) {

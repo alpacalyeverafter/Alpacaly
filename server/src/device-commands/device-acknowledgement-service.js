@@ -87,7 +87,9 @@ export class DeviceAcknowledgementService {
         let legacyAcknowledgement = null;
 
         if (acknowledgement.result === "SUCCEEDED") {
-            if (!["FAILED", "CANCELLED", "ACKNOWLEDGED"].includes(command.status)) {
+            if (![
+                "FAILED", "CANCELLED", "ACKNOWLEDGED", "OUTCOME_UNKNOWN"
+            ].includes(command.status)) {
                 transitions.push({
                     status: "ACKNOWLEDGED",
                     timestamp: acknowledgement.receivedAt,

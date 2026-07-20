@@ -19,7 +19,19 @@ export function presentPublicFeedRequest(feedRequest) {
 
 export function presentPublicEventEngineSnapshot(snapshot) {
     return {
-        ...snapshot,
+        status: snapshot.availability?.available === false
+            ? "TEMPORARILY_UNAVAILABLE"
+            : snapshot.status,
+        date: snapshot.date,
+        queueSize: snapshot.queueSize,
+        waitingQueueSize: snapshot.waitingQueueSize,
+        acceptedToday: snapshot.acceptedToday,
+        completedFeeds: snapshot.completedFeeds,
+        archivedCount: snapshot.archivedCount,
+        feedsRemaining: snapshot.feedsRemaining,
+        feedingWindowEnforced: snapshot.feedingWindowEnforced,
+        lastUpdatedAt: snapshot.lastUpdatedAt,
+        availability: snapshot.availability,
         activeEvent: presentPublicFeedRequest(snapshot.activeEvent)
     };
 }
@@ -29,7 +41,10 @@ export function presentPublicQueueStatistics(statistics) {
         barnId: statistics.barnId,
         feederId: statistics.feederId,
         queueId: statistics.queueId,
-        feederStatus: statistics.feederStatus,
+        feederStatus: statistics.availability?.available === false
+            ? "TEMPORARILY_UNAVAILABLE"
+            : statistics.feederStatus,
+        availability: statistics.availability,
         waitingCount: statistics.waitingCount,
         activeCount: statistics.activeCount,
         archivedCount: statistics.archivedCount,

@@ -20,6 +20,14 @@
     const historyList = document.getElementById("feed-history-list");
     const feedingNowElement = document.getElementById("feeding-now");
     const waitingQueueList = document.getElementById("waiting-queue-list");
+    const emergencyStopList = document.getElementById("emergency-stop-list");
+    const approvalRequestList = document.getElementById("approval-request-list");
+    const resolutionCaseList = document.getElementById("resolution-case-list");
+    const safetyActionStatus = document.getElementById("safety-action-status");
+    const emergencyStopReason = document.getElementById("emergency-stop-reason");
+    const activateEmergencyStopButton = document.getElementById(
+        "activate-emergency-stop"
+    );
 
     if (!eventEngine || !apiClient) {
         console.error("[Admin] Feed service modules were not loaded.");
@@ -57,6 +65,229 @@
 
         item.append(heading, description);
         return item;
+    }
+
+    function createActionButton(label, action) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button";
+        button.textContent = label;
+        button.style.marginTop = "10px";
+        button.style.marginRight = "8px";
+        button.addEventListener("click", () => void action());
+        return button;
+    }
+
+    function setSafetyStatus(message, isError = false) {
+        safetyActionStatus.textContent = message;
+        safetyActionStatus.style.color = isError ? "#9b1c1c" : "inherit";
+    }
+
+    function requiredAuthority(approvalRequest) {
+        const represented = (approvalRequest.decisions || [])
+            .filter(decision => decision.decision === "APPROVE")
+            .map(decision => decision.authorityRepresented);
+        const needed = [...(approvalRequest.requiredAuthorities || [])];
+        represented.forEach(authority => {
+            const index = needed.indexOf(authority);
+            if (index >= 0) {
+                needed.splice(index, 1);
+            }
+        });
+        return needed[0] || approvalRequest.requiredAuthorities?.[0] || "WELFARE";
+    }
+
+    async function performSafetyAction(action, successMessage) {
+        try {
+            await action();
+            setSafetyStatus(successMessage);
+            await refreshSafety();
+            await eventEngine.refreshStatus();
+        } catch (error) {
+            setSafetyStatus(error.message || "The safety action was rejected.", true);
+        }
+    }
+
+    function renderEmergencyStops(stops) {
+        emergencyStopList.replaceChildren();
+        if (stops.length === 0) {
+            emergencyStopList.append(createStatusItem(
+                "No active emergency stops",
+                "All emergency-stop controls are clear."
+            ));
+            return;
+        }
+        stops.forEach(stop => {
+            const item = createStatusItem(
+                `${stop.level} emergency stop`,
+                `${stop.emergencyStopId} • Active since ${new Date(stop.activatedAt).toLocaleString()}`
+            );
+            item.style.marginBottom = "12px";
+            item.append(createActionButton("Request clearance", async () => {
+                const reason = window.prompt("Reason for requesting clearance:");
+                if (!reason || !window.confirm(
+                    "Request dual approval to clear this emergency stop?"
+                )) {
+                    return;
+                }
+                await performSafetyAction(
+                    () => apiClient.requestEmergencyStopClear(
+                        stop.emergencyStopId,
+                        reason
+                    ),
+                    "Clearance request created. Two distinct authorised people must approve it."
+                );
+            }));
+            emergencyStopList.append(item);
+        });
+    }
+
+    function renderApprovalRequests(requests) {
+        approvalRequestList.replaceChildren();
+        const visible = requests.filter(request => [
+            "PENDING", "PARTIALLY_APPROVED", "APPROVED"
+        ].includes(request.status));
+        if (visible.length === 0) {
+            approvalRequestList.append(createStatusItem(
+                "No pending safety approvals",
+                "Critical actions awaiting a second person will appear here."
+            ));
+            return;
+        }
+        visible.forEach(approval => {
+            const item = createStatusItem(
+                approval.actionType.replaceAll("_", " "),
+                `${approval.status} • expires ${new Date(approval.expiresAt).toLocaleString()} • ${approval.decisions.length}/2 decisions`
+            );
+            item.style.marginBottom = "12px";
+            item.append(
+                createActionButton("Approve", async () => {
+                    const reason = window.prompt("Reason for approval:");
+                    if (!reason || !window.confirm(
+                        "Confirm this critical safety approval?"
+                    )) {
+                        return;
+                    }
+                    await performSafetyAction(
+                        () => apiClient.decideApproval(
+                            approval.approvalRequestId,
+                            "APPROVE",
+                            reason,
+                            requiredAuthority(approval)
+                        ),
+                        "Approval recorded."
+                    );
+                }),
+                createActionButton("Reject", async () => {
+                    const reason = window.prompt("Reason for rejection:");
+                    if (!reason || !window.confirm("Reject this critical action?")) {
+                        return;
+                    }
+                    await performSafetyAction(
+                        () => apiClient.decideApproval(
+                            approval.approvalRequestId,
+                            "REJECT",
+                            reason,
+                            requiredAuthority(approval)
+                        ),
+                        "Critical action rejected."
+                    );
+                })
+            );
+            approvalRequestList.append(item);
+        });
+    }
+
+    function renderResolutionCases(cases) {
+        resolutionCaseList.replaceChildren();
+        if (cases.length === 0) {
+            resolutionCaseList.append(createStatusItem(
+                "No uncertain outcomes",
+                "Uncertain physical dispense outcomes will be blocked here for review."
+            ));
+            return;
+        }
+        cases.forEach(resolutionCase => {
+            const item = createStatusItem(
+                `${resolutionCase.status} • ${resolutionCase.caseType.replaceAll("_", " ")}`,
+                `${resolutionCase.resolutionCaseId} • Event ${resolutionCase.eventId} • ${resolutionCase.finalResolution || "Awaiting resolution"}`
+            );
+            item.style.marginBottom = "12px";
+            if (resolutionCase.status === "OPEN") {
+                [
+                    "CONFIRMED_DISPENSED",
+                    "CONFIRMED_NOT_DISPENSED",
+                    "CANCELLED_FOR_WELFARE",
+                    "MANUAL_REVIEW_REQUIRED"
+                ].forEach(resolution => {
+                    item.append(createActionButton(
+                        resolution.replaceAll("_", " "),
+                        async () => {
+                            const reason = window.prompt(
+                                `Reason for ${resolution.replaceAll("_", " ").toLowerCase()}:`
+                            );
+                            if (!reason || !window.confirm(
+                                "Confirm this uncertain-outcome request?"
+                            )) {
+                                return;
+                            }
+                            await performSafetyAction(
+                                () => apiClient.requestOutcomeResolution(
+                                    resolutionCase.resolutionCaseId,
+                                    resolution,
+                                    reason,
+                                    null
+                                ),
+                                resolution === "MANUAL_REVIEW_REQUIRED"
+                                    ? "Case remains blocked for manual review."
+                                    : "Resolution request created for dual approval."
+                            );
+                        }
+                    ));
+                });
+            } else if (
+                resolutionCase.finalResolution === "CONFIRMED_NOT_DISPENSED"
+                && !resolutionCase.replacementCommandId
+            ) {
+                item.append(createActionButton("Request replacement command", async () => {
+                    const reason = window.prompt("Reason for replacement command:");
+                    if (!reason || !window.confirm(
+                        "Request a separately approved replacement dispense command?"
+                    )) {
+                        return;
+                    }
+                    await performSafetyAction(
+                        () => apiClient.requestReplacementCommand(
+                            resolutionCase.resolutionCaseId,
+                            reason
+                        ),
+                        "Replacement request created for dual approval."
+                    );
+                }));
+            }
+            resolutionCaseList.append(item);
+        });
+    }
+
+    async function refreshSafety() {
+        if (!administratorAuthenticated) {
+            return;
+        }
+        try {
+            const [stops, approvals, cases] = await Promise.all([
+                apiClient.listEmergencyStops(CONFIG.defaultBarnId),
+                apiClient.listApprovalRequests(CONFIG.defaultBarnId),
+                apiClient.listResolutionCases(CONFIG.defaultBarnId)
+            ]);
+            renderEmergencyStops(stops.emergencyStops || []);
+            renderApprovalRequests(approvals.approvalRequests || []);
+            renderResolutionCases(cases.resolutionCases || []);
+        } catch (error) {
+            setSafetyStatus(
+                error.message || "Safety controls are temporarily unavailable.",
+                true
+            );
+        }
     }
 
     function readSimulatedPayments() {
@@ -263,6 +494,7 @@
             renderWaitingQueue([], state.message || "Please try again shortly.");
         } else if (state.backendAvailable === true) {
             void refreshQueue();
+            void refreshSafety();
         }
     }
 
@@ -285,6 +517,30 @@
 
     renderPayments();
     renderHistory([]);
+    renderEmergencyStops([]);
+    renderApprovalRequests([]);
+    renderResolutionCases([]);
+    activateEmergencyStopButton?.addEventListener("click", () => {
+        const reason = emergencyStopReason.value.trim();
+        if (!reason) {
+            setSafetyStatus("Enter a reason before activating an emergency stop.", true);
+            return;
+        }
+        if (!window.confirm(
+            "Activate the emergency stop now? Physical execution will be blocked immediately."
+        )) {
+            return;
+        }
+        void performSafetyAction(
+            () => apiClient.activateEmergencyStop({
+                level: "FEEDER",
+                barnId: CONFIG.defaultBarnId,
+                feederId: CONFIG.defaultFeederId,
+                reason
+            }),
+            "Emergency stop activated."
+        );
+    });
     window.setInterval(renderPayments, 1000);
     void initializeAdministrator();
 })();

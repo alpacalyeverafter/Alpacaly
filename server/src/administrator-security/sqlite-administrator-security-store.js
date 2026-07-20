@@ -58,6 +58,7 @@ function mapAuditRecord(row) {
         targetId: row.targetId,
         reason: row.reason,
         requestId: row.requestId,
+        approvalId: row.approvalId,
         authenticationStrength: row.authenticationStrength,
         timestamp: row.timestamp,
         result: row.result,
@@ -163,8 +164,8 @@ export class SqliteAdministratorSecurityStore {
                     auditRecordId, administratorId, effectiveRole, barnId,
                     feederId, deviceId, action, targetType, targetId, reason,
                     requestId, authenticationStrength, timestamp, result,
-                    beforeSummaryJson, afterSummaryJson, metadataJson
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    beforeSummaryJson, afterSummaryJson, metadataJson, approvalId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `),
             selectAuditRecords: this.database.prepare(`
                 SELECT *
@@ -553,7 +554,8 @@ export class SqliteAdministratorSecurityStore {
             record.result,
             serializeJson(record.beforeSummary),
             serializeJson(record.afterSummary),
-            serializeJson(record.metadata)
+            serializeJson(record.metadata),
+            record.approvalId
         );
     }
 }

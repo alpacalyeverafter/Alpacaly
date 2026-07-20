@@ -42,6 +42,9 @@ test("creates the required persistent Event Store tables", t => {
 
     assert.deepEqual(engine.eventStore.getTableNames(), [
         "Administrators",
+        "ApprovalDecisions",
+        "ApprovalRequestHistory",
+        "ApprovalRequests",
         "AuditRecords",
         "BarnScopes",
         "Barns",
@@ -53,6 +56,7 @@ test("creates the required persistent Event Store tables", t => {
         "DeviceCommandOutbox",
         "DeviceCommands",
         "Devices",
+        "EmergencyStops",
         "Events",
         "FeedIntentHistory",
         "FeedIntents",
@@ -61,6 +65,7 @@ test("creates the required persistent Event Store tables", t => {
         "HardwareAcknowledgements",
         "LifecycleHistory",
         "OperatorAuditRecords",
+        "OperatorResolutionCases",
         "Outbox",
         "ProviderEvents",
         "Queue",
@@ -68,9 +73,10 @@ test("creates the required persistent Event Store tables", t => {
         "RoleAssignments",
         "SimulatedDeviceExecutions",
         "SimulatedDeviceFences",
-        "WelfareNotes"
+        "WelfareNotes",
+        "WelfareSafetyLedger"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 6);
+    assert.equal(engine.eventStore.getSchemaVersion(), 7);
 
     engine.close();
 });

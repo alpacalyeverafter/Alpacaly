@@ -67,7 +67,10 @@ export function createDeviceCommandServices({
         pollIntervalMs: config.deviceCommandPollIntervalMs,
         acknowledgementTimeoutMs: config.deviceAcknowledgementTimeoutMs,
         retryDelayMs: config.deviceCommandRetryDelayMs,
-        ...(workerSleep ? { sleep: workerSleep } : {})
+        ...(workerSleep ? { sleep: workerSleep } : {}),
+        onOutcomeUnknown: command => {
+            deviceCommandService.commandOutcomeUnknown(command);
+        }
     });
     deviceCommandService.setWorker(worker);
     eventEngine.setDeviceCommandService(deviceCommandService);

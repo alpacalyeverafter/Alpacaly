@@ -9,8 +9,9 @@ import { migration005DurableDeviceCommands } from "./005-durable-device-commands
 import {
     migration006AdministratorSecurityFoundation
 } from "./006-administrator-security-foundation.js";
+import { migration007OperatorSafety } from "./007-operator-safety.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 6;
+export const EVENT_STORE_SCHEMA_VERSION = 7;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -18,7 +19,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration003ContributionLedger,
     migration004DurableFeedIntentOutbox,
     migration005DurableDeviceCommands,
-    migration006AdministratorSecurityFoundation
+    migration006AdministratorSecurityFoundation,
+    migration007OperatorSafety
 ]);
 
 function readUserVersion(database) {
@@ -36,14 +38,27 @@ export function runEventStoreMigrations(database, logger) {
     EVENT_STORE_MIGRATIONS
         .filter(migration => migration.version > startingVersion)
         .forEach(migration => {
+            if (migration.requiresForeignKeysDisabled) {
+                database.exec("PRAGMA foreign_keys = OFF;");
+            }
             database.exec("BEGIN IMMEDIATE;");
             try {
                 migration.up(database);
+                const violations = database.prepare("PRAGMA foreign_key_check;").all();
+                if (violations.length > 0) {
+                    throw new Error(
+                        `Migration ${migration.version} introduced foreign-key violations.`
+                    );
+                }
                 database.exec(`PRAGMA user_version = ${migration.version};`);
                 database.exec("COMMIT;");
             } catch (error) {
                 database.exec("ROLLBACK;");
                 throw error;
+            } finally {
+                if (migration.requiresForeignKeysDisabled) {
+                    database.exec("PRAGMA foreign_keys = ON;");
+                }
             }
 
             logger.info({

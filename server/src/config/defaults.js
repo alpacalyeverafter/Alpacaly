@@ -11,6 +11,8 @@ export const DEFAULTS = Object.freeze({
     corsOrigin: "*",
     databasePath: "./data/alpacaly.sqlite",
     enableDevelopmentAuthentication: false,
+    managedIdentityProviderConfigured: false,
+    criticalApprovalLifetimeMs: 15 * 60 * 1000,
     outboxPollIntervalMs: 250,
     outboxRetryDelayMs: 1000,
     deviceCommandPollIntervalMs: 100,
