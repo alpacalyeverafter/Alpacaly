@@ -93,10 +93,9 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
     const externalEventId = `postgres-integration-${randomUUID()}`;
     const result = services.developmentWebsiteContributionService.simulate({
         externalEventId,
-        supporterDisplayName: "PostgreSQL Integration",
+        supporterName: "PostgreSQL Integration",
         amountMinor: 500,
         currency: "GBP",
-        feedQuantity: 1,
         message: "PostgreSQL persistence parity"
     });
 
