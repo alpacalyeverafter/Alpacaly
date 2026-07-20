@@ -4,8 +4,12 @@ import { spawn } from "node:child_process";
 import test from "node:test";
 
 import { createContributionLedgerServices } from "../src/contribution-ledger/index.js";
+import { DEFAULT_RESOURCE_IDS } from "../src/domain/resources.js";
 import { EventEngine } from "../src/event-engine/event-engine.js";
 import { PostgresEventStore } from "../src/event-store/postgres-event-store.js";
+import {
+    SqliteOperatorSafetyStore
+} from "../src/operator-safety/sqlite-operator-safety-store.js";
 import { DistributedClaimStore } from "../src/worker-coordination/distributed-claim-store.js";
 import { createTestLogger, testConfig } from "./helpers.js";
 
@@ -108,6 +112,98 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
 
     services.outboxWorker.stop();
     eventEngine.close();
+});
+
+test("PostgreSQL optional emergency-stop filters accept null and typed values", {
+    skip
+}, () => {
+    const eventStore = new PostgresEventStore({
+        config: postgresConfig(),
+        logger: createTestLogger()
+    });
+    const store = new SqliteOperatorSafetyStore({ eventStore });
+    const activeId = `postgres-null-filter-active-${randomUUID()}`;
+    const clearedId = `postgres-null-filter-cleared-${randomUUID()}`;
+    const administratorId = `postgres-null-filter-admin-${randomUUID()}`;
+    const stopIds = [activeId, clearedId];
+    const selectTestStops = filters => store.getEmergencyStops(filters)
+        .filter(stop => stopIds.includes(stop.emergencyStopId));
+
+    eventStore.database.exec("BEGIN");
+    try {
+        eventStore.database.prepare(`
+            INSERT INTO Administrators (
+                administratorId, externalIdentityId, displayName, email,
+                status, createdAt, updatedAt, lastAuthenticatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            administratorId,
+            `postgres:null-filter:${administratorId}`,
+            "PostgreSQL Null Filter Test",
+            "postgres-null-filter@testing.alpacaly.invalid",
+            "ACTIVE",
+            "2026-07-20T12:00:00.000Z",
+            "2026-07-20T12:00:00.000Z",
+            null
+        );
+        store.createEmergencyStop({
+            emergencyStopId: activeId,
+            level: "FEEDER",
+            barnId: DEFAULT_RESOURCE_IDS.barnId,
+            feederId: DEFAULT_RESOURCE_IDS.feederId,
+            status: "ACTIVE",
+            activatedBy: administratorId,
+            activatedRole: "ADMINISTRATOR",
+            reason: "PostgreSQL nullable filter coverage",
+            requestId: null,
+            activatedAt: "2026-07-20T12:00:00.000Z",
+            clearedAt: null,
+            clearanceApprovalRequestId: null
+        });
+        store.createEmergencyStop({
+            emergencyStopId: clearedId,
+            level: "FEEDER",
+            barnId: DEFAULT_RESOURCE_IDS.barnId,
+            feederId: DEFAULT_RESOURCE_IDS.feederId,
+            status: "CLEARED",
+            activatedBy: administratorId,
+            activatedRole: "ADMINISTRATOR",
+            reason: "PostgreSQL nullable filter coverage",
+            requestId: null,
+            activatedAt: "2026-07-20T12:00:00.000Z",
+            clearedAt: "2026-07-20T12:01:00.000Z",
+            clearanceApprovalRequestId: null
+        });
+
+        assert.deepEqual(
+            new Set(selectTestStops().map(stop => stop.emergencyStopId)),
+            new Set(stopIds)
+        );
+        assert.deepEqual(
+            selectTestStops({ status: "ACTIVE" }).map(stop => stop.emergencyStopId),
+            [activeId]
+        );
+        assert.deepEqual(
+            new Set(selectTestStops({
+                barnId: DEFAULT_RESOURCE_IDS.barnId
+            }).map(stop => stop.emergencyStopId)),
+            new Set(stopIds)
+        );
+        assert.deepEqual(
+            new Set(selectTestStops({
+                feederId: DEFAULT_RESOURCE_IDS.feederId
+            }).map(stop => stop.emergencyStopId)),
+            new Set(stopIds)
+        );
+        assert.deepEqual(selectTestStops({
+            status: "ACTIVE",
+            barnId: DEFAULT_RESOURCE_IDS.barnId,
+            feederId: DEFAULT_RESOURCE_IDS.feederId
+        }).map(stop => stop.emergencyStopId), [activeId]);
+    } finally {
+        eventStore.database.exec("ROLLBACK");
+        eventStore.close();
+    }
 });
 
 test("two PostgreSQL processes cannot acquire the same claim", { skip }, async () => {
