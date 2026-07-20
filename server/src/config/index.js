@@ -61,6 +61,36 @@ function parseDatabasePath(value) {
     return candidate === ":memory:" ? candidate : resolve(candidate);
 }
 
+function parseChoice(value, fallback, name, choices) {
+    const normalized = String(value || fallback).trim().toLowerCase();
+    if (!choices.includes(normalized)) {
+        throw new Error(`${name} must be one of: ${choices.join(", ")}.`);
+    }
+    return normalized;
+}
+
+function optionalString(value) {
+    const normalized = value === undefined || value === null
+        ? "" : String(value).trim();
+    return normalized || null;
+}
+
+function parseJsonObject(value, fallback, name) {
+    if (value === undefined || value === "") {
+        return fallback;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(String(value));
+    } catch {
+        throw new Error(`${name} must be valid JSON.`);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`${name} must be a JSON object.`);
+    }
+    return parsed;
+}
+
 export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     if (loadEnvFile) {
         dotenv.config({ quiet: true });
@@ -75,6 +105,157 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     const corsOrigin = String(env.CORS_ORIGIN || DEFAULTS.corsOrigin).trim();
     if (!corsOrigin) {
         throw new Error("CORS_ORIGIN must not be empty.");
+    }
+
+    const deviceTransport = parseChoice(
+        env.DEVICE_TRANSPORT,
+        DEFAULTS.deviceTransport,
+        "DEVICE_TRANSPORT",
+        ["in_process", "mqtt"]
+    );
+    const mqttProtocolVersion = parseInteger(
+        env.MQTT_PROTOCOL_VERSION,
+        DEFAULTS.mqttProtocolVersion,
+        "MQTT_PROTOCOL_VERSION",
+        { minimum: 4, maximum: 5 }
+    );
+    const mqttDevelopmentKeysRequested = parseBoolean(
+        env.MQTT_DEVELOPMENT_KEYS,
+        true,
+        "MQTT_DEVELOPMENT_KEYS"
+    );
+    const mqtt = {
+        mqttEnvironment: String(
+            env.MQTT_ENVIRONMENT || (nodeEnv === "production" ? "production" : nodeEnv)
+        ).trim().toLowerCase(),
+        mqttProtocolVersion,
+        mqttCommandQos: parseInteger(
+            env.MQTT_COMMAND_QOS,
+            DEFAULTS.mqttCommandQos,
+            "MQTT_COMMAND_QOS",
+            { minimum: 0, maximum: 2 }
+        ),
+        mqttBrokerUrl: optionalString(env.MQTT_BROKER_URL),
+        mqttClientId: String(env.MQTT_CLIENT_ID || DEFAULTS.mqttClientId).trim(),
+        mqttConnectTimeoutMs: parseInteger(
+            env.MQTT_CONNECT_TIMEOUT_MS,
+            DEFAULTS.mqttConnectTimeoutMs,
+            "MQTT_CONNECT_TIMEOUT_MS"
+        ),
+        mqttReconnectPeriodMs: parseInteger(
+            env.MQTT_RECONNECT_PERIOD_MS,
+            DEFAULTS.mqttReconnectPeriodMs,
+            "MQTT_RECONNECT_PERIOD_MS",
+            { minimum: 0 }
+        ),
+        mqttCommandExpiryMs: parseInteger(
+            env.MQTT_COMMAND_EXPIRY_MS,
+            DEFAULTS.mqttCommandExpiryMs,
+            "MQTT_COMMAND_EXPIRY_MS",
+            { minimum: 100 }
+        ),
+        mqttAuthorityLeaseMs: parseInteger(
+            env.MQTT_AUTHORITY_LEASE_MS,
+            DEFAULTS.mqttAuthorityLeaseMs,
+            "MQTT_AUTHORITY_LEASE_MS",
+            { minimum: 100 }
+        ),
+        mqttHeartbeatIntervalMs: parseInteger(
+            env.MQTT_HEARTBEAT_INTERVAL_MS,
+            DEFAULTS.mqttHeartbeatIntervalMs,
+            "MQTT_HEARTBEAT_INTERVAL_MS",
+            { minimum: 10 }
+        ),
+        mqttStaleThresholdMs: parseInteger(
+            env.MQTT_STALE_THRESHOLD_MS,
+            DEFAULTS.mqttStaleThresholdMs,
+            "MQTT_STALE_THRESHOLD_MS",
+            { minimum: 10 }
+        ),
+        mqttOfflineThresholdMs: parseInteger(
+            env.MQTT_OFFLINE_THRESHOLD_MS,
+            DEFAULTS.mqttOfflineThresholdMs,
+            "MQTT_OFFLINE_THRESHOLD_MS",
+            { minimum: 10 }
+        ),
+        mqttClockDriftToleranceMs: parseInteger(
+            env.MQTT_CLOCK_DRIFT_TOLERANCE_MS,
+            DEFAULTS.mqttClockDriftToleranceMs,
+            "MQTT_CLOCK_DRIFT_TOLERANCE_MS",
+            { minimum: 0 }
+        ),
+        mqttTlsCaPath: optionalString(env.MQTT_TLS_CA_PATH),
+        mqttTlsCertificatePath: optionalString(env.MQTT_TLS_CERTIFICATE_PATH),
+        mqttTlsPrivateKeyPath: optionalString(env.MQTT_TLS_PRIVATE_KEY_PATH),
+        mqttServerSigningKeyId: String(
+            env.MQTT_SERVER_SIGNING_KEY_ID || DEFAULTS.mqttServerSigningKeyId
+        ).trim(),
+        mqttServerSigningPrivateKey: optionalString(
+            env.MQTT_SERVER_SIGNING_PRIVATE_KEY
+        ),
+        mqttServerSigningPublicKeys: parseJsonObject(
+            env.MQTT_SERVER_SIGNING_PUBLIC_KEYS,
+            {},
+            "MQTT_SERVER_SIGNING_PUBLIC_KEYS"
+        ),
+        mqttControllerSigningKeyId: String(
+            env.MQTT_CONTROLLER_SIGNING_KEY_ID
+                || DEFAULTS.mqttControllerSigningKeyId
+        ).trim(),
+        mqttControllerSigningPrivateKey: optionalString(
+            env.MQTT_CONTROLLER_SIGNING_PRIVATE_KEY
+        ),
+        mqttControllerSigningPublicKeys: parseJsonObject(
+            env.MQTT_CONTROLLER_SIGNING_PUBLIC_KEYS,
+            {},
+            "MQTT_CONTROLLER_SIGNING_PUBLIC_KEYS"
+        ),
+        mqttDevelopmentKeys: nodeEnv !== "production"
+            && mqttDevelopmentKeysRequested
+    };
+
+    if (deviceTransport === "mqtt") {
+        if (!mqtt.mqttBrokerUrl) {
+            throw new Error("MQTT_BROKER_URL is required for the MQTT transport.");
+        }
+        if (nodeEnv === "production") {
+            if (mqttProtocolVersion !== 5) {
+                throw new Error("Production MQTT transport requires MQTT 5.");
+            }
+            if (!mqtt.mqttBrokerUrl.startsWith("mqtts://")) {
+                throw new Error("Production MQTT transport requires an mqtts:// broker URL.");
+            }
+            const missingSecurity = [
+                ["MQTT_TLS_CA_PATH", mqtt.mqttTlsCaPath],
+                ["MQTT_TLS_CERTIFICATE_PATH", mqtt.mqttTlsCertificatePath],
+                ["MQTT_TLS_PRIVATE_KEY_PATH", mqtt.mqttTlsPrivateKeyPath],
+                ["MQTT_SERVER_SIGNING_PRIVATE_KEY", mqtt.mqttServerSigningPrivateKey],
+                ["MQTT_SERVER_SIGNING_KEY_ID", optionalString(
+                    env.MQTT_SERVER_SIGNING_KEY_ID
+                )]
+            ].filter(([, value]) => !value).map(([name]) => name);
+            if (missingSecurity.length > 0) {
+                throw new Error(
+                    `Production MQTT security settings are missing: ${missingSecurity.join(", ")}.`
+                );
+            }
+            if (Object.keys(mqtt.mqttControllerSigningPublicKeys).length === 0) {
+                throw new Error(
+                    "MQTT_CONTROLLER_SIGNING_PUBLIC_KEYS is required in production."
+                );
+            }
+            if (
+                mqttDevelopmentKeysRequested
+                || mqtt.mqttServerSigningKeyId.startsWith("alpacaly-development-")
+            ) {
+                throw new Error("Production MQTT transport rejects development signing keys.");
+            }
+            if (mqtt.mqttControllerSigningPrivateKey) {
+                throw new Error(
+                    "Production servers must not be configured with controller private keys."
+                );
+            }
+        }
     }
 
     return Object.freeze({
@@ -165,6 +346,8 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             "DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS",
             { minimum: 0 }
         ),
+        deviceTransport,
+        ...mqtt,
         simulatedControllerHeartbeatIntervalMs: parseInteger(
             env.SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS,
             DEFAULTS.simulatedControllerHeartbeatIntervalMs,

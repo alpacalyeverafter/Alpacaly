@@ -374,7 +374,7 @@ test("migrates Phase 5 events in place and recovers them after restart", t => {
         autoProcess: false
     });
     const migrated = firstRestart.getFeedRequest("feed_legacy");
-    assert.equal(firstRestart.eventStore.getSchemaVersion(), 8);
+    assert.equal(firstRestart.eventStore.getSchemaVersion(), 9);
     assert.equal(migrated.eventId, "feed_legacy");
     assert.equal(migrated.sequenceNumber, 41);
     assert.deepEqual(

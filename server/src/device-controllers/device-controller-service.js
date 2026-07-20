@@ -18,11 +18,24 @@ export class DeviceControllerService {
         this.config = config;
         this.clock = clock;
         this.auditService = null;
+        this.approvalService = null;
         this.worker = null;
     }
 
     setAdministratorSecurityServices(services) {
         this.auditService = services.auditService;
+    }
+
+    setApprovalService(approvalService) {
+        this.approvalService = approvalService;
+        approvalService.registerExecutor(
+            "ENABLE_PRODUCTION_CONTROLLER",
+            (request, context) => this.executeApprovedEnable(request, context)
+        );
+        approvalService.registerExecutor(
+            "REASSIGN_PRODUCTION_CONTROLLER",
+            (request, context) => this.executeApprovedReassignment(request, context)
+        );
     }
 
     setWorker(worker) {
@@ -52,6 +65,20 @@ export class DeviceControllerService {
     setEnabled(controllerId, enabled, context) {
         const before = this.get(controllerId);
         const reason = requireReason(context?.reason);
+        if (enabled && !before.enabled && this.config.nodeEnv === "production") {
+            if (!this.approvalService) {
+                throw new Error("Controller approval service is not configured.");
+            }
+            return this.approvalService.createRequest({
+                actionType: "ENABLE_PRODUCTION_CONTROLLER",
+                targetType: "DEVICE_CONTROLLER",
+                targetId: controllerId,
+                barnId: before.barnId,
+                reason,
+                requiredAuthorities: ["HARDWARE", "PLATFORM_ADMIN"],
+                actionPayload: { controllerId }
+            }, context);
+        }
         let after = this.store.setEnabled(
             controllerId,
             Boolean(enabled),
@@ -78,7 +105,112 @@ export class DeviceControllerService {
         if (after.enabled) {
             void this.worker?.processReadyCommands();
         }
+        void this.transport.publishAssignments?.(controllerId);
         return after;
+    }
+
+    executeApprovedEnable(request, context) {
+        const controllerId = request.actionPayload.controllerId;
+        const before = this.get(controllerId);
+        if (before.enabled) {
+            return before;
+        }
+        const after = this.store.setEnabled(
+            controllerId,
+            true,
+            this.clock().toISOString()
+        );
+        this.audit(context, {
+            action: "PRODUCTION_CONTROLLER_ENABLED",
+            targetType: "DEVICE_CONTROLLER",
+            targetId: controllerId,
+            barnId: after.barnId,
+            reason: request.reason,
+            approvalId: request.approvalRequestId,
+            result: "SUCCEEDED",
+            beforeSummary: this.safeSummary(before),
+            afterSummary: this.safeSummary(after)
+        });
+        void this.transport.publishAssignments?.(controllerId);
+        void this.worker?.processReadyCommands();
+        return after;
+    }
+
+    reassignFeeder(controllerId, feederId, context) {
+        const controller = this.get(controllerId);
+        const reason = requireReason(context?.reason);
+        if (this.config.nodeEnv === "production") {
+            if (!this.approvalService) {
+                throw new Error("Controller approval service is not configured.");
+            }
+            return this.approvalService.createRequest({
+                actionType: "REASSIGN_PRODUCTION_CONTROLLER",
+                targetType: "FEEDER_CONTROLLER_ASSIGNMENT",
+                targetId: feederId,
+                barnId: controller.barnId,
+                feederId,
+                reason,
+                requiredAuthorities: ["HARDWARE", "PLATFORM_ADMIN"],
+                actionPayload: { controllerId, feederId }
+            }, context);
+        }
+        const assignment = this.store.reassignFeeder(feederId, controllerId, {
+            timestamp: this.clock().toISOString(),
+            reason
+        });
+        this.audit(context, {
+            action: "SIMULATED_CONTROLLER_REASSIGNED",
+            targetType: "FEEDER_CONTROLLER_ASSIGNMENT",
+            targetId: feederId,
+            barnId: controller.barnId,
+            feederId,
+            reason,
+            result: "SUCCEEDED",
+            afterSummary: assignment
+        });
+        void this.transport.publishAssignments?.(controllerId);
+        return assignment;
+    }
+
+    executeApprovedReassignment(request, context) {
+        const { controllerId, feederId } = request.actionPayload;
+        const previous = this.store.getAssignmentForFeeder(feederId);
+        const assignment = this.store.reassignFeeder(feederId, controllerId, {
+            timestamp: this.clock().toISOString(),
+            reason: request.reason,
+            approvalRequestId: request.approvalRequestId
+        });
+        this.audit(context, {
+            action: "PRODUCTION_CONTROLLER_REASSIGNED",
+            targetType: "FEEDER_CONTROLLER_ASSIGNMENT",
+            targetId: feederId,
+            barnId: assignment.barnId,
+            feederId,
+            reason: request.reason,
+            approvalId: request.approvalRequestId,
+            result: "SUCCEEDED",
+            beforeSummary: previous,
+            afterSummary: assignment
+        });
+        void this.transport.publishAssignments?.(previous?.controllerId);
+        void this.transport.publishAssignments?.(controllerId);
+        return assignment;
+    }
+
+    getTransportStatus() {
+        return this.transport.getConnectionStatus();
+    }
+
+    getProtocolVisibility(controllerId, limit = 100) {
+        const controller = this.get(controllerId);
+        return {
+            transport: this.getTransportStatus(),
+            controller: this.safeSummary(controller),
+            recentProtocolEvents: this.store.getProtocolEvents({
+                controllerId,
+                limit
+            })
+        };
     }
 
     setConnectionState(controllerId, state, context) {
@@ -196,9 +328,20 @@ export class DeviceControllerService {
             softwareVersion: controller.softwareVersion,
             protocolVersion: controller.protocolVersion,
             lastSeenAt: controller.lastSeenAt,
+            controllerBootId: controller.controllerBootId,
+            bootCounter: controller.bootCounter,
+            lastHeartbeatReceivedAt: controller.lastHeartbeatReceivedAt,
+            statusExpiresAt: controller.statusExpiresAt,
+            revokedAt: controller.revokedAt,
             assignments: controller.assignments.map(assignment => ({
                 barnId: assignment.barnId,
-                feederId: assignment.feederId
+                feederId: assignment.feederId,
+                assignmentGeneration: assignment.assignmentGeneration,
+                authorityLeaseExpiresAt: assignment.authorityLeaseExpiresAt,
+                authorityLeaseValid: Number.isFinite(
+                    Date.parse(assignment.authorityLeaseExpiresAt)
+                ) && Date.parse(assignment.authorityLeaseExpiresAt)
+                    > this.clock().getTime()
             })),
             simulationBehaviour: controller.simulationBehaviour
         };

@@ -92,6 +92,20 @@ export class DeviceCommandWorker {
                     controllerId: payload?.controllerId,
                     error: String(payload?.error?.message || payload?.error || "unknown")
                 }, "Device transport reported an error");
+            },
+            onOutcomeUnknown: ({ commandId, reason }) => {
+                const command = this.deviceCommandStore.getCommand(commandId);
+                if (!command || isTerminalDeviceCommandState(command.status)) {
+                    return;
+                }
+                this.markOutcomeUnknown(commandId, {
+                    timestamp: this.clock().toISOString(),
+                    lastError: reason || "Controller reported an uncertain outcome",
+                    details: { source: "DEVICE_TRANSPORT" }
+                });
+            },
+            onReconnect: () => {
+                void this.reconcileOutstanding({ force: true });
             }
         });
         this.transportStarted = true;

@@ -14,6 +14,7 @@ export function createDeviceCommandServices({
     deviceAdapter = null,
     adapterSleep,
     workerSleep,
+    mqttConnect,
     startWorker = false
 }) {
     const deviceCommandStore = new SqliteDeviceCommandStore({
@@ -25,9 +26,11 @@ export function createDeviceCommandServices({
         deviceCommandStore,
         config,
         clock,
+        logger,
         transport: deviceAdapter,
         ...(idGenerator ? { idGenerator } : {}),
-        ...(adapterSleep ? { controllerSleep: adapterSleep } : {})
+        ...(adapterSleep ? { controllerSleep: adapterSleep } : {}),
+        ...(mqttConnect ? { mqttConnect } : {})
     });
     const deviceTransport = controllerServices.deviceTransport;
     let deviceCommandService;

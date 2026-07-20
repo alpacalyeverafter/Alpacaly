@@ -838,7 +838,7 @@ test("an approved critical action safely resumes on an authenticated retry after
     );
 });
 
-test("migration 7 remains compatible when the store advances to schema 8", t => {
+test("migration 7 remains compatible when the store advances to schema 9", t => {
     const directory = mkdtempSync(join(tmpdir(), "alpacaly-safety-migration-"));
     const databasePath = join(directory, "events.sqlite");
     t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -855,7 +855,7 @@ test("migration 7 remains compatible when the store advances to schema 8", t => 
     legacy.close();
     assert.equal(existsSync(databasePath), true);
     const migrated = new SqliteEventStore({ databasePath, logger });
-    assert.equal(migrated.getSchemaVersion(), 8);
+    assert.equal(migrated.getSchemaVersion(), 9);
     assert.ok(migrated.getTableNames().includes("EmergencyStops"));
     assert.ok(migrated.getTableNames().includes("ApprovalRequests"));
     assert.ok(migrated.getTableNames().includes("OperatorResolutionCases"));

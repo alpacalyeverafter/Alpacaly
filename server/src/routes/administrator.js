@@ -692,6 +692,20 @@ export function createAdministratorRouter({
     );
 
     router.get(
+        "/device-transport",
+        authorize(services, PERMISSIONS.VIEW_DEVICE_CONTROLLERS, req => ({
+            barnId: req.query.barnId || null,
+            targetType: "DEVICE_TRANSPORT"
+        })),
+        (req, res) => {
+            res.status(200).json({
+                transport: controllers.getTransportStatus(),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.get(
         "/device-controllers",
         authorize(services, PERMISSIONS.VIEW_DEVICE_CONTROLLERS, req => ({
             barnId: req.query.barnId || null,
@@ -718,6 +732,28 @@ export function createAdministratorRouter({
             try {
                 res.status(200).json({
                     controller: controllers.get(req.params.controllerId),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/device-controllers/:controllerId/protocol",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_DEVICE_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    protocol: controllers.getProtocolVisibility(
+                        req.params.controllerId,
+                        req.query.limit
+                    ),
                     requestId: req.requestId
                 });
             } catch (error) {
@@ -762,7 +798,45 @@ export function createAdministratorRouter({
                     req.body?.enabled === true,
                     actionContext(req)
                 );
-                res.status(200).json({ controller, requestId: req.requestId });
+                if (controller?.approvalRequestId) {
+                    res.status(202).json({
+                        approvalRequest: controller,
+                        requestId: req.requestId
+                    });
+                } else {
+                    res.status(200).json({ controller, requestId: req.requestId });
+                }
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/device-controllers/:controllerId/assignments/:feederId",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SIMULATED_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                const result = controllers.reassignFeeder(
+                    req.params.controllerId,
+                    req.params.feederId,
+                    actionContext(req)
+                );
+                if (result?.approvalRequestId) {
+                    res.status(202).json({
+                        approvalRequest: result,
+                        requestId: req.requestId
+                    });
+                } else {
+                    res.status(200).json({
+                        assignment: result,
+                        requestId: req.requestId
+                    });
+                }
             } catch (error) {
                 next(error);
             }

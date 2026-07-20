@@ -39,6 +39,7 @@ export class EmergencyStopService {
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.outcomeUnknownHandler = null;
+        this.stateListeners = new Set();
 
         approvalService.registerExecutor(
             "CLEAR_EMERGENCY_STOP",
@@ -48,6 +49,17 @@ export class EmergencyStopService {
 
     setOutcomeUnknownHandler(handler) {
         this.outcomeUnknownHandler = handler;
+    }
+
+    addStateListener(listener) {
+        this.stateListeners.add(listener);
+        return () => this.stateListeners.delete(listener);
+    }
+
+    notifyStateListeners(change) {
+        this.stateListeners.forEach(listener => {
+            Promise.resolve(listener(change)).catch(() => {});
+        });
     }
 
     activate(input, context) {
@@ -123,6 +135,7 @@ export class EmergencyStopService {
                 afterSummary: this.safeStop(persisted)
             });
             this.eventEngine.emitEngineUpdate("EMERGENCY_STOP_ACTIVATED");
+            this.notifyStateListeners({ type: "ACTIVATED", stop: persisted });
             return persisted;
         } catch (error) {
             this.audit(context, {
@@ -192,6 +205,7 @@ export class EmergencyStopService {
         });
         this.eventEngine.scheduleProcessing();
         this.eventEngine.emitEngineUpdate("EMERGENCY_STOP_CLEARED");
+        this.notifyStateListeners({ type: "CLEARED", stop: cleared });
         return cleared;
     }
 

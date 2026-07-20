@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7C backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral transport boundary.
+This directory contains the Phase 7D-2 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, MQTT protocol evidence, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
-## Phase 7C boundaries
+## Phase 7D-2 boundaries
 
 Included:
 
@@ -27,6 +27,14 @@ Included:
 - Durable `RING_BELL` and `DISPENSE_FEED` DeviceCommands with one command per Event action
 - Persistent Device Command Outbox, state history, acknowledgements, and audit records
 - Hardware-neutral `DeviceTransport` contract with an in-process transport
+- Configuration-selected MQTT transport with an MQTT 5 production profile
+- Versioned controller/Barn/Feeder topic namespace and strict topic identity checks
+- Canonically serialized Ed25519 command, acknowledgement, heartbeat, status,
+  assignment, and safety envelopes with rotation/revocation support
+- Retained, signed, expiring and fenced assignment/emergency-stop state
+- Durable assignment generations, authority leases, delivery/replay evidence,
+  protocol events, controller boot identity, and reconnect reconciliation
+- Embedded loopback broker tests requiring no manual broker installation
 - Persistent simulated controller identities and Barn/Feeder assignments
 - Durable controller execution journals and restart-safe action memory
 - `ACCEPTED`, `STARTED`, and `SUCCEEDED` acknowledgement progression
@@ -77,7 +85,8 @@ Intentionally excluded:
 - Stripe or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
 - Real managed OpenID Connect provider integration, passwords, and production sessions
-- Real hardware transports, feeder control, MQTT, GPIO, Raspberry Pi, or ESP32 integration
+- Real feeder control, GPIO, Raspberry Pi, or ESP32 integration
+- Production broker hosting, certificates, certificate authority, or device enrolment
 - Camera integration or streaming
 - Live-video integration
 
@@ -124,6 +133,16 @@ The default server address is `http://localhost:3000`.
 | `DEVICE_COMMAND_RETRY_DELAY_MS` | `1000` | Delay before retrying a command confirmed not to have run. |
 | `DEVICE_COMMAND_MAXIMUM_ATTEMPTS` | `3` | Maximum safe delivery attempts before a command fails. |
 | `DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS` | `5000` | Deadline for a device acknowledgement before reconciliation. |
+| `DEVICE_TRANSPORT` | `in_process` | Selects `in_process` or `mqtt`; production never falls back automatically. |
+| `MQTT_ENVIRONMENT` | runtime environment | Environment-isolated topic namespace. |
+| `MQTT_PROTOCOL_VERSION` | `5` | MQTT wire version. Production requires 5. |
+| `MQTT_BROKER_URL` | unset | Broker URL. Required for MQTT; production requires `mqtts://`. |
+| `MQTT_COMMAND_EXPIRY_MS` | `15000` | Signed command lifetime. |
+| `MQTT_AUTHORITY_LEASE_MS` | `30000` | Maximum time a controller may start newly received work under current authority. |
+| `MQTT_HEARTBEAT_INTERVAL_MS` | `5000` | Signed controller heartbeat interval. |
+| `MQTT_STALE_THRESHOLD_MS` | `15000` | Heartbeat age at which a controller becomes `STALE`. |
+| `MQTT_OFFLINE_THRESHOLD_MS` | `30000` | Heartbeat age at which a controller becomes `OFFLINE`. |
+| `MQTT_DEVELOPMENT_KEYS` | development only | Enables committed test fixtures outside production. Production rejects them. |
 | `SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS` | `5000` | Interval between in-process controller heartbeats. |
 | `SIMULATED_CONTROLLER_HEARTBEAT_TIMEOUT_MS` | `15000` | Age after which the backend reports an online controller as `STALE`. |
 | `ENABLE_SIMULATED_CONTROLLER_CONFIGURATION` | development only | Enables protected behaviour, connection, and restart controls. Always disabled when `NODE_ENV=production`. |
@@ -136,16 +155,16 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Existing Events, histories, commands, acknowledgements, queues, contribution data, administrator assignments, and audit records are preserved in place. Commands are created only when Events enter or resume `BELL` and `DISPENSING`, or after a separately approved replacement request.
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Migration 9 adds fenced controller-assignment generations, authority leases, boot/liveness state, edge evidence, MQTT delivery/replay records, retained safety generations, and append-only protocol/assignment history. Existing durable data is preserved in place.
 
-## Simulated controller architecture
+## Simulated controller and MQTT architecture
 
-The Device Command worker depends only on `DeviceTransport`. Phase 7C supplies an
-`InProcessDeviceTransport`, which routes each command to the persistent controller
-assigned to that command's Barn and Feeder. A future MQTT transport can implement
-the same `start`, `deliver`, acknowledgement-receiver, reconciliation, connection,
-heartbeat, and shutdown contract without changing the Event Engine or command
-state machine.
+The Device Command worker depends only on `DeviceTransport`. Phase 7D-2 keeps the
+`InProcessDeviceTransport` and adds `MqttDeviceTransport` behind configuration.
+The MQTT adapter handles connection/reconnect, signed publishing, inbound
+acknowledgements/heartbeats/status, retained assignments/safety state,
+observability, reconciliation, and graceful shutdown without changing the Event
+Engine or Device Command state machine.
 
 The controller validates its identity, Barn, Feeder, Device, fencing token,
 operational state, and current Phase 7B-2 safety state before acting. It records
@@ -162,17 +181,16 @@ welfare-blocking workflow remains authoritative and no automatic retry occurs.
 Emergency stops, disabled Feeders or Devices, disabled/offline/stale controllers,
 and unresolved outcome cases all prevent new simulated actions.
 
-Controller administration is available only below `/api/admin/device-controllers`.
-Listing and execution history require existing view permissions. Enable/disable,
-connection, deterministic behaviour, and restart actions require Hardware Operator
-or Administrator authority in the controller's Barn and create operator audit
-records. Behaviour, connection, and restart simulation are disabled in production.
+Controller administration is protected below `/api/admin`. Disable is immediate;
+production enable/re-enable and reassignment use expiring two-person approval.
+Protocol views expose boot, heartbeat, assignment generation, lease, sanitized
+errors, counters, and reconciliation state without secrets.
 
-Everything beyond the server remains simulated: there is no broker, network
-transport, device credential, Raspberry Pi process, GPIO, bell, motor, auger, or
-physical acknowledgement. MQTT should later replace only the transport and edge
-runtime while retaining command IDs, fencing, journal semantics, acknowledgements,
-timeouts, safety gates, and operator resolution.
+The detailed architecture, topic/envelope contracts, signing and test credential
+handling, X.509 expectations, ACL model, retention, fencing, leases, emergency
+stops, journal/reconciliation rules, configuration, broker limitations, and
+remaining simulations are documented in
+[`docs/secure-mqtt-transport.md`](docs/secure-mqtt-transport.md).
 
 ## Operator safety flow
 
@@ -573,14 +591,14 @@ The server writes newline-delimited JSON logs to standard output. Request-comple
 npm test
 ```
 
-The test suite covers FeedIntent creation, atomic Outbox processing, repeated attempts, worker recovery, and duplicate Event prevention. Phase 7A coverage adds durable command creation and Outbox state, acknowledgement-gated lifecycle advancement, unavailable-device retry, reconnection, timeout, unknown outcomes, late/duplicate/out-of-order/malformed acknowledgements, cancellation, per-feeder ordering and isolation, stale-token fencing, graceful worker stop/start, mixed pending/retrying/timed-out recovery, and file-backed crash boundaries. Phase 7B-1 coverage adds development/production authentication boundaries, suspended/revoked identity rejection, every role and permission, Barn isolation, explicit platform access, administrator and assignment management, public privacy, immutable success/rejection audits, reset protection, operational pause/maintenance, migration, browser-client authentication behavior, and file-backed restart recovery. Existing API, ledger, lifecycle, migration, and multi-feeder tests remain in place.
+The suite covers all earlier ledger, lifecycle, browser, authorization, safety, migration, and restart behavior. Phase 7D-2 adds deterministic topic/ACL and envelope validation, canonical Ed25519 signing, tampering/revocation/rotation, production fail-closed configuration, live broker connection/reconnect, signed command and acknowledgement flow, duplicate delivery, wrong identity, fencing generations, leases/expiry, retained emergency stops, controller restart, post-dispense `OUTCOME_UNKNOWN`, dual-approved production enablement, immediate disable, protected secret-free protocol visibility, and in-process compatibility.
 
 ## Frontend connection
 
 The existing pages use `js/api-client.js` and `js/event-engine.js` to call this service at the URL configured by `CONFIG.apiBaseUrl`. The website submission now calls `/api/development/website-contributions`; no visual or journey changes were made. Feed requests, Event IDs, queue totals, queue positions, wait estimates, lifecycle states, queue entries, archive entries, and development reset all come from the server. The supporter page tracks its resulting Event through targeted REST reads, and both pages receive real-time state changes through the lifecycle event stream with polling as a fallback.
 
-The browser no longer owns or simulates a feed queue or countdown. The public website uses supporter-safe APIs; the admin page loads full queue and archive information only after its configured development identity is accepted. The website's payment display and behaviour remain simulated, and the server-side WEBSITE verification used in development is not a real payment check. Countdown and archive delays remain server-side simulations. Bell and dispensing are durable simulated Device Commands. Stripe, YouTube, TikTok, Facebook, real hardware, a managed identity provider, production sessions, dual approval, emergency stop, manual unknown-outcome resolution, supporter identity across page reloads, multi-process worker leasing, database backup automation, and production provider approval rules are not implemented.
+The browser no longer owns or simulates a feed queue or countdown. The public website uses supporter-safe APIs; the admin page loads full queue and archive information only after its configured development identity is accepted. The website's payment display and behaviour remain simulated, and server-side WEBSITE verification is not a real payment check. Countdown, bell, and dispensing remain simulations. Stripe, social/video providers, real hardware, a managed identity provider, production sessions/broker/certificates, supporter identity across page reloads, multi-process worker leasing, and backup automation are not implemented. The public website was not changed in Phase 7D-2.
 
 ## Development Summary
 
-Phase 1 established the server boundary, Phases 2–5 connected the website and made lifecycle state durable, and Phase 6 added stable resources, independent feeder queues, the Contribution Ledger, FeedIntents, and its Outbox. Phase 7A added the durable Device Command boundary. Phase 7B-1 adds a provider-neutral authentication boundary, persisted Administrators, role and Barn-scope authorization, protected operator APIs, durable pause/maintenance controls, public data minimization, and immutable operator audit history without storing passwords or connecting a real identity provider. A managed OpenID Connect provider, controller certificates and transport, dual approval, emergency stop, operator resolution for unknown outcomes, PostgreSQL, multi-instance worker leasing, and operational backup/recovery remain future work.
+Phase 1 established the server boundary, Phases 2–5 made the website lifecycle durable, Phase 6 added resources, queues, Contributions, FeedIntents, and Outbox, Phase 7A added Device Commands, Phase 7B added administrator safety and dual approval, and Phase 7C added the durable simulated controller. Phase 7D-2 now proves the signed MQTT path through an embedded test broker while preserving the in-process transport. Production certificates, broker deployment, physical controllers/hardware, PostgreSQL, multi-instance leasing, and operational backup/recovery remain future work.

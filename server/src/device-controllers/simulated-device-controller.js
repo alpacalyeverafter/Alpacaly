@@ -116,6 +116,7 @@ export class SimulatedDeviceController {
         }
 
         if (journal.executionState === "ACCEPTED") {
+            this.requireAuthorityToStart(command);
             const started = this.acknowledgement(command, controller, "STARTED");
             journal = this.store.transitionJournal(journal.journalId, "STARTED", {
                 timestamp: started.receivedAt
@@ -294,9 +295,40 @@ export class SimulatedDeviceController {
                 controllerId: controller.controllerId,
                 feederId: command.feederId,
                 protocolVersion: controller.protocolVersion,
-                fencingToken: command.fencingToken
+                fencingToken: command.fencingToken,
+                assignmentGeneration: command.assignmentGeneration || null
             }
         });
+    }
+
+    requireAuthorityToStart(command) {
+        const now = this.clock().getTime();
+        if (
+            command.expiresAt
+            && Date.parse(command.expiresAt) <= now
+        ) {
+            const error = new DeviceUnavailableError("The command has expired.");
+            error.code = "MQTT_COMMAND_EXPIRED";
+            error.terminalFailure = true;
+            throw error;
+        }
+        if (
+            command.authorityLeaseExpiresAt
+            && Date.parse(command.authorityLeaseExpiresAt) <= now
+        ) {
+            const error = new DeviceUnavailableError(
+                "The controller authority lease has expired."
+            );
+            error.code = "MQTT_AUTHORITY_LEASE_EXPIRED";
+            error.terminalFailure = true;
+            throw error;
+        }
+        if (!this.store.isAuthorized(this.controllerId, command)) {
+            throw new StaleFencingTokenError(
+                "The controller assignment generation is no longer current."
+            );
+        }
+        this.assertSafety(command);
     }
 
     requireAvailableController(command) {

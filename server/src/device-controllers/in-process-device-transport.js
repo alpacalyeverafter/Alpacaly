@@ -139,6 +139,16 @@ export class InProcessDeviceTransport extends DeviceTransport {
         return { outcome: "CONFIRMED_NOT_PROCESSED", acknowledgement: null };
     }
 
+    getConnectionStatus() {
+        return {
+            transportType: "in_process",
+            state: this.started ? "CONNECTED" : "DISCONNECTED",
+            connected: this.started,
+            reconnectCount: 0,
+            lastError: null
+        };
+    }
+
     runtime(controllerId) {
         if (!this.controllers.has(controllerId)) {
             this.controllers.set(controllerId, new SimulatedDeviceController({

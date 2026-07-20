@@ -1355,6 +1355,8 @@ export class SqliteEventStore {
                 DELETE FROM ApprovalRequestHistory;
                 DELETE FROM SimulatedControllerJournalHistory;
                 DELETE FROM SimulatedControllerCommandJournal;
+                DELETE FROM MqttInboundMessages;
+                DELETE FROM MqttOutboundDeliveries;
                 DELETE FROM DeviceAcknowledgements;
                 DELETE FROM SimulatedDeviceExecutions;
                 DELETE FROM SimulatedDeviceFences;
@@ -1365,6 +1367,7 @@ export class SqliteEventStore {
                 DELETE FROM OperatorResolutionCases;
                 DELETE FROM ApprovalRequests;
                 DELETE FROM EmergencyStops;
+                DELETE FROM MqttSafetyStates;
                 DELETE FROM AuditRecords;
                 DELETE FROM Events;
                 DELETE FROM FeedIntentHistory;

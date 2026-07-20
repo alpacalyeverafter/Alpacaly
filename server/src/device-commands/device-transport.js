@@ -11,6 +11,10 @@ export class DeviceTransport {
 
     setSafetyService() {}
 
+    getConnectionStatus() {
+        return { transportType: "unknown", state: "UNKNOWN" };
+    }
+
     async shutdown() {}
 }
 

@@ -60,6 +60,8 @@ export function createOperatorSafetyServices({
         ...options
     });
 
+    deviceCommandServices.controllerService?.setApprovalService(approvalService);
+
     emergencyStopService.setOutcomeUnknownHandler((command, context) => (
         operatorResolutionService.handleOutcomeUnknown(command, context)
     ));

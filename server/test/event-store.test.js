@@ -50,6 +50,7 @@ test("creates the required persistent Event Store tables", t => {
         "Barns",
         "Cameras",
         "Contributions",
+        "ControllerAssignmentHistory",
         "DeviceAcknowledgements",
         "DeviceCommandAuditRecords",
         "DeviceCommandHistory",
@@ -64,6 +65,10 @@ test("creates the required persistent Event Store tables", t => {
         "Feeders",
         "HardwareAcknowledgements",
         "LifecycleHistory",
+        "MqttInboundMessages",
+        "MqttOutboundDeliveries",
+        "MqttProtocolEvents",
+        "MqttSafetyStates",
         "OperatorAuditRecords",
         "OperatorResolutionCases",
         "Outbox",
@@ -80,7 +85,7 @@ test("creates the required persistent Event Store tables", t => {
         "WelfareNotes",
         "WelfareSafetyLedger"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 8);
+    assert.equal(engine.eventStore.getSchemaVersion(), 9);
 
     engine.close();
 });

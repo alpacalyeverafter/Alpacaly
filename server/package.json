@@ -16,9 +16,11 @@
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "mqtt": "^5.14.1",
     "pino": "^9.7.0"
   },
   "devDependencies": {
+    "aedes": "^0.51.3",
     "supertest": "^7.1.1"
   }
 }

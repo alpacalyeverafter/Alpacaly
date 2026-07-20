@@ -13,8 +13,11 @@ import { migration007OperatorSafety } from "./007-operator-safety.js";
 import {
     migration008SimulatedDeviceControllers
 } from "./008-simulated-device-controllers.js";
+import {
+    migration009SecureMqttTransport
+} from "./009-secure-mqtt-transport.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 8;
+export const EVENT_STORE_SCHEMA_VERSION = 9;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -24,7 +27,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration005DurableDeviceCommands,
     migration006AdministratorSecurityFoundation,
     migration007OperatorSafety,
-    migration008SimulatedDeviceControllers
+    migration008SimulatedDeviceControllers,
+    migration009SecureMqttTransport
 ]);
 
 function readUserVersion(database) {
