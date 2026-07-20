@@ -1,0 +1,113 @@
+import { DeviceAcknowledgementService } from "./device-acknowledgement-service.js";
+import { DeviceCommandService } from "./device-command-service.js";
+import { DeviceCommandWorker } from "./device-command-worker.js";
+import { SqliteDeviceCommandStore } from "./sqlite-device-command-store.js";
+import { createDeviceControllerServices } from "../device-controllers/index.js";
+import { createDistributedClaimStore } from "../worker-coordination/distributed-claim-store.js";
+import { createWorkerIdentity } from "../worker-coordination/worker-identity.js";
+
+export function createDeviceCommandServices({
+    eventEngine,
+    eventStore = eventEngine.eventStore,
+    config,
+    logger,
+    clock = eventEngine.clock,
+    idGenerator,
+    deviceAdapter = null,
+    adapterSleep,
+    workerSleep,
+    mqttConnect,
+    startWorker = false
+}) {
+    const claimStore = createDistributedClaimStore({ eventStore, config, clock });
+    const workerIdentity = createWorkerIdentity({
+        config,
+        serviceType: "device-command",
+        clock
+    });
+    const deviceCommandStore = new SqliteDeviceCommandStore({
+        eventStore,
+        ...(idGenerator ? { idGenerator } : {})
+    });
+    const controllerServices = createDeviceControllerServices({
+        eventStore,
+        deviceCommandStore,
+        config,
+        clock,
+        logger,
+        transport: deviceAdapter,
+        ...(idGenerator ? { idGenerator } : {}),
+        ...(adapterSleep ? { controllerSleep: adapterSleep } : {}),
+        ...(mqttConnect ? { mqttConnect } : {})
+    });
+    const deviceTransport = controllerServices.deviceTransport;
+    let deviceCommandService;
+    const acknowledgementService = new DeviceAcknowledgementService({
+        deviceCommandStore,
+        logger,
+        clock,
+        ...(idGenerator ? { idGenerator } : {}),
+        onSuccessfulAcknowledgement: payload => {
+            const stage = payload.command.commandType === "RING_BELL"
+                ? "BELL"
+                : "DISPENSING";
+            eventEngine.applyPersistedDeviceAcknowledgement(
+                payload.command.eventId,
+                stage,
+                {
+                    status: "ACKNOWLEDGED",
+                    receivedAt: payload.acknowledgement.receivedAt,
+                    details: payload.legacyAcknowledgement.details
+                }
+            );
+            deviceCommandService.commandAcknowledged(payload);
+            eventEngine.scheduleProcessing(payload.command.feederId);
+        }
+    });
+    deviceCommandService = new DeviceCommandService({
+        deviceCommandStore,
+        eventStore,
+        config,
+        logger,
+        clock,
+        maximumAttempts: config.deviceCommandMaximumAttempts,
+        ...(idGenerator ? { idGenerator } : {})
+    });
+    const worker = new DeviceCommandWorker({
+        deviceCommandStore,
+        deviceTransport,
+        acknowledgementService,
+        claimStore,
+        workerIdentity,
+        logger,
+        clock,
+        pollIntervalMs: config.deviceCommandPollIntervalMs,
+        acknowledgementTimeoutMs: config.deviceAcknowledgementTimeoutMs,
+        retryDelayMs: config.deviceCommandRetryDelayMs,
+        claimHeartbeatIntervalMs: config.workerHeartbeatIntervalMs,
+        maximumClaimAttempts: config.workerMaximumAttempts,
+        ...(workerSleep ? { sleep: workerSleep } : {}),
+        onOutcomeUnknown: command => {
+            deviceCommandService.commandOutcomeUnknown(command);
+        }
+    });
+    deviceCommandService.setWorker(worker);
+    controllerServices.controllerService.setWorker(worker);
+    eventEngine.setDeviceCommandService(deviceCommandService);
+
+    if (startWorker) {
+        worker.start();
+    }
+
+    return {
+        deviceCommandStore,
+        deviceTransport,
+        deviceAdapter: deviceTransport,
+        ...controllerServices,
+        acknowledgementService,
+        deviceCommandService,
+        worker,
+        claimStore,
+        workerIdentity
+    };
+}

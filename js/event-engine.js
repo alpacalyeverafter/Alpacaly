@@ -1,312 +1,436 @@
 // ============================================
 // Alpacaly Ever After
-// Central Event Engine, Version 1
+// Server-backed Event Engine adapter
 // ============================================
 
-class EventEngine {
-    constructor(config, queue, hardware) {
-        if (!config || !queue || !hardware) {
-            throw new Error("EventEngine requires config, queue and hardware.");
-        }
+(function exposeServerEventEngine(global) {
+    "use strict";
 
-        this.config = config;
-        this.queue = queue;
-        this.hardware = hardware;
-        this.processing = false;
-        this.completedFeeds = 0;
-        this.seenEventIds = new Set();
-        this.eventHistory = [];
-        this.listeners = new Set();
+    class ServerEventEngine {
+        constructor(config, apiClient, { autoStart = true } = {}) {
+            if (!config || !apiClient) {
+                throw new Error("ServerEventEngine requires config and apiClient.");
+            }
 
-        this.state = {
-            status: "READY",
-            message: "Ready for the next supporter.",
-            currentEvent: null,
-            completedFeeds: 0,
-            feedsRemaining: this.config.dailyFeedLimit,
-            queueSize: 0,
-            error: null
-        };
-    }
-
-    subscribe(listener) {
-        if (typeof listener !== "function") {
-            return () => {};
-        }
-
-        this.listeners.add(listener);
-        listener(this.getState());
-
-        return () => this.listeners.delete(listener);
-    }
-
-    getState() {
-        return {
-            ...this.state,
-            currentEvent: this.state.currentEvent
-                ? { ...this.state.currentEvent }
-                : null
-        };
-    }
-
-    getEventHistory() {
-        return this.eventHistory.map(entry => ({ ...entry }));
-    }
-
-    createDonationEvent({ supporterName, source = "website", amount = 0, message = "" }) {
-        return {
-            id: this.generateEventId(source),
-            type: "FEED_DONATION",
-            source: String(source || "website"),
-            supporterName: this.cleanSupporterName(supporterName),
-            amount: Number(amount) || 0,
-            message: String(message || "").trim(),
-            createdAt: new Date().toISOString()
-        };
-    }
-
-    submitEvent(event) {
-        const validation = this.validateEvent(event);
-
-        if (!validation.valid) {
-            this.logEvent(event, "REJECTED", validation.reason);
-            return {
-                accepted: false,
-                reason: validation.reason,
-                message: validation.message
-            };
-        }
-
-        // Record the ID before queueing. Retries can never produce a second feed.
-        this.seenEventIds.add(event.id);
-
-        const welfareCheck = this.checkWelfareRules();
-        if (!welfareCheck.allowed) {
-            this.logEvent(event, "REJECTED", welfareCheck.reason);
-            this.setState("UNAVAILABLE", welfareCheck.message, {
+            this.config = config;
+            this.apiClient = apiClient;
+            this.listeners = new Set();
+            this.pollTimerId = null;
+            this.lifecycleStreamClose = null;
+            this.state = {
+                status: "CONNECTING",
+                message: "Connecting to the feed service.",
                 currentEvent: null,
-                error: welfareCheck.reason
-            });
+                trackedEvent: null,
+                completedFeeds: 0,
+                acceptedToday: 0,
+                feedsRemaining: this.config.DEMO_MAX_FEEDS,
+                queueSize: 0,
+                backendAvailable: null,
+                error: null
+            };
 
+            if (autoStart) {
+                void this.refreshStatus();
+                this.startRealtimeUpdates();
+                this.startPolling();
+            }
+        }
+
+        subscribe(listener) {
+            if (typeof listener !== "function") {
+                return () => {};
+            }
+
+            this.listeners.add(listener);
+            listener(this.getState());
+            return () => this.listeners.delete(listener);
+        }
+
+        getState() {
             return {
-                accepted: false,
-                reason: welfareCheck.reason,
-                message: welfareCheck.message
+                ...this.state,
+                currentEvent: this.state.currentEvent
+                    ? { ...this.state.currentEvent }
+                    : null,
+                trackedEvent: this.state.trackedEvent
+                    ? { ...this.state.trackedEvent }
+                    : null
             };
         }
 
-        const queueResult = this.queue.add(event);
-        if (!queueResult.accepted) {
-            this.logEvent(event, "REJECTED", queueResult.reason);
+        createDonationEvent({ supporterName, source = "website", message = "" }) {
+            const clientRequestId = this.generateClientRequestId(source);
             return {
-                accepted: false,
-                reason: queueResult.reason,
-                message: "This event could not be added to the queue."
+                id: clientRequestId,
+                type: "FEED_REQUEST",
+                clientRequestId,
+                source: String(source || "website"),
+                supporterName: this.cleanSupporterName(supporterName),
+                message: String(message || "").trim(),
+                createdAt: new Date().toISOString()
             };
         }
 
-        this.logEvent(event, "QUEUED");
-        this.setState("QUEUED", `Thank you, ${event.supporterName}. Your feed is queued.`, {
-            currentEvent: event,
-            error: null
-        });
+        async submitEvent(event) {
+            try {
+                const response = await this.apiClient.createFeedRequest({
+                    supporterName: event && event.supporterName,
+                    source: event && event.source,
+                    message: event && event.message,
+                    clientRequestId: event && (event.clientRequestId || event.id)
+                });
 
-        // Deliberately not awaited. The UI receives an immediate acceptance result.
-        void this.processQueue();
+                this.applySnapshot(response.eventEngine, {
+                    message: `Thank you, ${response.feedRequest.supporterName}. Your feed is queued.`
+                });
 
-        return {
-            accepted: true,
-            event: { ...event },
-            queuePosition: queueResult.position
-        };
-    }
+                const trackedEvent = this.setTrackedEvent({
+                    ...response.feedRequest,
+                    queuePosition: response.feedRequest.queuePosition ?? response.queuePosition,
+                    estimatedWaitMs: response.feedRequest.estimatedWaitMs
+                        ?? response.estimatedWaitMs
+                        ?? 0
+                });
+                void this.refreshTrackedEvent();
 
-    validateEvent(event) {
-        if (!event || typeof event !== "object") {
-            return { valid: false, reason: "INVALID_EVENT", message: "The event is invalid." };
+                return {
+                    accepted: true,
+                    event: trackedEvent,
+                    queuePosition: trackedEvent.queuePosition,
+                    estimatedWaitMs: trackedEvent.estimatedWaitMs
+                };
+            } catch (error) {
+                this.handleApiError(error);
+                return {
+                    accepted: false,
+                    reason: error.code || "API_ERROR",
+                    message: error.message || "The feed request could not be submitted."
+                };
+            }
         }
 
-        if (!event.id || typeof event.id !== "string") {
-            return { valid: false, reason: "EVENT_ID_REQUIRED", message: "Every event needs a unique ID." };
+        async refreshStatus() {
+            try {
+                const response = await this.apiClient.getEventEngineStatus();
+                this.applySnapshot(response.eventEngine);
+                return { success: true, state: this.getState() };
+            } catch (error) {
+                this.handleApiError(error);
+                return {
+                    success: false,
+                    reason: error.code || "API_ERROR",
+                    message: error.message
+                };
+            }
         }
 
-        if (this.seenEventIds.has(event.id)) {
-            return { valid: false, reason: "DUPLICATE_EVENT", message: "This event has already been received." };
+        async getQueue() {
+            try {
+                const response = await this.apiClient.listFeedRequests();
+                return {
+                    success: true,
+                    feedRequests: Array.isArray(response.feedRequests)
+                        ? response.feedRequests.map(entry => ({ ...entry }))
+                        : [],
+                    archivedFeedRequests: Array.isArray(response.archivedFeedRequests)
+                        ? response.archivedFeedRequests.map(entry => ({ ...entry }))
+                        : []
+                };
+            } catch (error) {
+                this.handleApiError(error);
+                return {
+                    success: false,
+                    feedRequests: [],
+                    archivedFeedRequests: [],
+                    reason: error.code || "API_ERROR",
+                    message: error.message
+                };
+            }
         }
 
-        if (event.type !== "FEED_DONATION") {
-            return { valid: false, reason: "UNSUPPORTED_EVENT_TYPE", message: "This event type is not supported yet." };
-        }
+        async refreshTrackedEvent() {
+            const trackedEvent = this.state.trackedEvent;
+            if (
+                !trackedEvent
+                || !trackedEvent.eventId
+                || typeof this.apiClient.getFeedRequest !== "function"
+            ) {
+                return { success: true, event: trackedEvent };
+            }
 
-        if (!event.source) {
-            return { valid: false, reason: "EVENT_SOURCE_REQUIRED", message: "The event source is required." };
-        }
-
-        return { valid: true, reason: null, message: null };
-    }
-
-    checkWelfareRules(now = new Date()) {
-        if (this.completedFeeds >= this.config.dailyFeedLimit) {
-            return {
-                allowed: false,
-                reason: "DAILY_LIMIT_REACHED",
-                message: "Today's safe feeding limit has been reached."
-            };
-        }
-
-        // Simulation mode lets the team test safely at any time.
-        if (this.config.simulationMode) {
-            return { allowed: true, reason: null, message: null };
-        }
-
-        if (!this.isWithinFeedingWindow(now)) {
-            return {
-                allowed: false,
-                reason: "OUTSIDE_FEEDING_WINDOW",
-                message: "Feeding is currently outside the approved animal-care window."
-            };
-        }
-
-        return { allowed: true, reason: null, message: null };
-    }
-
-    isWithinFeedingWindow(now = new Date()) {
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-        return this.config.feedingWindows.some(window => {
-            const start = this.timeToMinutes(window.start);
-            const end = this.timeToMinutes(window.end);
-            return currentMinutes >= start && currentMinutes <= end;
-        });
-    }
-
-    timeToMinutes(value) {
-        const [hours, minutes] = String(value).split(":").map(Number);
-        return hours * 60 + minutes;
-    }
-
-    async processQueue() {
-        if (this.processing) {
-            return;
-        }
-
-        this.processing = true;
-
-        try {
-            while (!this.queue.isEmpty()) {
-                const event = this.queue.next();
-                if (!event) {
-                    break;
+            try {
+                const response = await this.apiClient.getFeedRequest(trackedEvent.eventId);
+                if (
+                    !this.state.trackedEvent
+                    || this.state.trackedEvent.eventId !== trackedEvent.eventId
+                ) {
+                    return {
+                        success: true,
+                        stale: true,
+                        event: this.state.trackedEvent
+                    };
                 }
 
-                await this.processEvent(event);
+                return {
+                    success: true,
+                    event: this.setTrackedEvent(response.feedRequest)
+                };
+            } catch (error) {
+                if (error && error.code === "FEED_REQUEST_NOT_FOUND") {
+                    if (
+                        this.state.trackedEvent
+                        && this.state.trackedEvent.eventId === trackedEvent.eventId
+                    ) {
+                        this.setState({ trackedEvent: null });
+                    }
+                    return { success: false, reason: error.code, event: null };
+                }
+
+                this.handleApiError(error);
+                return {
+                    success: false,
+                    reason: error.code || "API_ERROR",
+                    message: error.message,
+                    event: trackedEvent
+                };
             }
-        } finally {
-            this.processing = false;
-            this.setState("READY", "Ready for the next supporter.", {
-                currentEvent: null,
+        }
+
+        async resetDemo() {
+            try {
+                const response = await this.apiClient.resetEventEngine();
+                this.applySnapshot(response.eventEngine, {
+                    message: "Demo queue reset. Ready for the next supporter."
+                });
+                this.setState({ trackedEvent: null });
+                return { success: true, state: this.getState() };
+            } catch (error) {
+                this.handleApiError(error);
+                return {
+                    success: false,
+                    reason: error.code || "API_ERROR",
+                    message: error.message
+                };
+            }
+        }
+
+        applySnapshot(snapshot, { message = null } = {}) {
+            if (!snapshot || typeof snapshot !== "object") {
+                return;
+            }
+
+            const status = snapshot.status || "READY";
+            const defaultMessage = this.getLifecycleMessage(status, snapshot);
+            const safetyMessage = snapshot.availability?.available === false
+                ? snapshot.availability.message
+                : null;
+
+            this.setState({
+                status,
+                message: safetyMessage || message || defaultMessage,
+                currentEvent: snapshot.activeEvent
+                    ? { ...snapshot.activeEvent }
+                    : null,
+                completedFeeds: Number(snapshot.completedFeeds) || 0,
+                acceptedToday: Number(snapshot.acceptedToday) || 0,
+                feedsRemaining: Number(snapshot.feedsRemaining) || 0,
+                queueSize: Number(snapshot.queueSize) || 0,
+                backendAvailable: true,
                 error: null
             });
         }
-    }
 
-    async processEvent(event) {
-        this.setState("PREPARING", `Preparing ${event.supporterName}'s feed.`, {
-            currentEvent: event,
-            error: null
-        });
-        this.logEvent(event, "PROCESSING");
+        handleApiError(error) {
+            const serviceUnavailable = [
+                "API_UNAVAILABLE",
+                "REQUEST_TIMEOUT",
+                "FETCH_UNAVAILABLE",
+                "INVALID_API_RESPONSE"
+            ].includes(error && error.code);
 
-        this.setState("CALLING_HERD", "Bell ringing. The animals are being alerted.", {
-            currentEvent: event
-        });
-
-        const bellResult = await this.hardware.ringBell(event.id);
-        if (!bellResult.success) {
-            this.failEvent(event, "BELL_FAILED", bellResult.error || "Bell failed.");
-            return;
-        }
-
-        this.setState("FEEDING", "A measured demo feed is being released.", {
-            currentEvent: event
-        });
-
-        const feedResult = await this.hardware.dispenseFeed(event.id);
-        if (!feedResult.success) {
-            this.failEvent(event, "FEEDER_FAILED", feedResult.error || "Feeder failed.");
-            return;
-        }
-
-        this.completedFeeds += 1;
-        this.logEvent(event, "COMPLETED", null, {
-            hardwareConfirmation: "HARDWARE_SEQUENCE_CONFIRMED",
-            bellResult,
-            feedResult
-        });
-
-        this.setState("COMPLETE", `Feed complete. Thank you, ${event.supporterName}.`, {
-            currentEvent: event,
-            error: null
-        });
-
-        await this.delay(this.config.completeDelay);
-    }
-
-    failEvent(event, reason, message) {
-        this.logEvent(event, "FAILED", reason);
-        this.setState("ERROR", message, {
-            currentEvent: event,
-            error: reason
-        });
-    }
-
-    logEvent(event, status, reason = null, details = {}) {
-        this.eventHistory.push({
-            eventId: event && event.id ? event.id : null,
-            type: event && event.type ? event.type : null,
-            source: event && event.source ? event.source : null,
-            supporterName: event && event.supporterName ? event.supporterName : null,
-            status,
-            reason,
-            recordedAt: new Date().toISOString(),
-            ...details
-        });
-    }
-
-    setState(status, message, extra = {}) {
-        this.state = {
-            ...this.state,
-            ...extra,
-            status,
-            message,
-            completedFeeds: this.completedFeeds,
-            feedsRemaining: Math.max(0, this.config.dailyFeedLimit - this.completedFeeds),
-            queueSize: this.queue.size()
-        };
-
-        const snapshot = this.getState();
-        this.listeners.forEach(listener => {
-            try {
-                listener(snapshot);
-            } catch (error) {
-                console.error("[EventEngine] Listener failed:", error);
+            if (serviceUnavailable) {
+                this.setState({
+                    status: "UNAVAILABLE",
+                    message: error.message || "The feed service is unavailable. Please try again shortly.",
+                    backendAvailable: false,
+                    error: error.code || "API_UNAVAILABLE"
+                });
+                return;
             }
-        });
+
+            this.setState({
+                message: error && error.message
+                    ? error.message
+                    : "The feed request could not be completed.",
+                backendAvailable: true,
+                error: error && error.code ? error.code : "API_ERROR"
+            });
+        }
+
+        setState(nextState) {
+            this.state = {
+                ...this.state,
+                ...nextState
+            };
+
+            const snapshot = this.getState();
+            this.listeners.forEach(listener => {
+                try {
+                    listener(snapshot);
+                } catch (error) {
+                    console.error("[ServerEventEngine] Listener failed:", error);
+                }
+            });
+        }
+
+        setTrackedEvent(feedRequest) {
+            if (!feedRequest || typeof feedRequest !== "object") {
+                this.setState({ trackedEvent: null });
+                return null;
+            }
+
+            const trackedEvent = {
+                ...feedRequest,
+                eventId: feedRequest.eventId || feedRequest.id,
+                id: feedRequest.id || feedRequest.eventId,
+                state: feedRequest.state || feedRequest.status || "QUEUED",
+                status: feedRequest.status || feedRequest.state || "QUEUED",
+                queuePosition: feedRequest.queuePosition !== null
+                    && feedRequest.queuePosition !== undefined
+                    && Number.isFinite(Number(feedRequest.queuePosition))
+                    ? Number(feedRequest.queuePosition)
+                    : null,
+                estimatedWaitMs: Math.max(0, Number(feedRequest.estimatedWaitMs) || 0)
+            };
+
+            this.setState({ trackedEvent });
+            return { ...trackedEvent };
+        }
+
+        startRealtimeUpdates() {
+            if (
+                this.lifecycleStreamClose
+                || typeof this.apiClient.subscribeToLifecycle !== "function"
+            ) {
+                return;
+            }
+
+            this.lifecycleStreamClose = this.apiClient.subscribeToLifecycle({
+                onEvent: payload => {
+                    if (!payload || !payload.eventEngine) {
+                        return;
+                    }
+
+                    if (
+                        payload.type === "FEED_REQUEST_STATE_CHANGED"
+                        && payload.state
+                        && payload.feedRequest
+                    ) {
+                        const activeEvent = payload.eventEngine.activeEvent
+                            ? payload.eventEngine.activeEvent
+                            : payload.feedRequest;
+                        this.applySnapshot({
+                            ...payload.eventEngine,
+                            status: activeEvent.state || activeEvent.status || payload.state,
+                            activeEvent
+                        });
+                    } else {
+                        this.applySnapshot(payload.eventEngine);
+                    }
+
+                    if (payload.type === "EVENT_ENGINE_RESET") {
+                        this.setState({ trackedEvent: null });
+                    } else if (
+                        payload.type === "FEED_REQUEST_STATE_CHANGED"
+                        && payload.feedRequest
+                        && this.state.trackedEvent
+                        && payload.eventId === this.state.trackedEvent.eventId
+                    ) {
+                        this.setTrackedEvent(payload.feedRequest);
+                    }
+
+                    void this.refreshTrackedEvent();
+                },
+                onError: () => {
+                    void this.refreshStatus();
+                }
+            });
+        }
+
+        startPolling() {
+            if (this.pollTimerId) {
+                return;
+            }
+
+            const interval = Number(this.config.apiPollIntervalMs) || 5000;
+            this.pollTimerId = global.setInterval(() => {
+                void this.refreshStatus();
+                void this.refreshTrackedEvent();
+            }, interval);
+        }
+
+        stopPolling() {
+            if (!this.pollTimerId) {
+                return;
+            }
+
+            global.clearInterval(this.pollTimerId);
+            this.pollTimerId = null;
+        }
+
+        stop() {
+            this.stopPolling();
+            if (typeof this.lifecycleStreamClose === "function") {
+                this.lifecycleStreamClose();
+            }
+            this.lifecycleStreamClose = null;
+        }
+
+        getLifecycleMessage(status, snapshot) {
+            const messages = {
+                RECEIVED: "Feed request received.",
+                VALIDATED: "Feed request validated.",
+                QUEUED: `${Number(snapshot.queueSize) || 0} feed request(s) waiting.`,
+                APPROVED: "Feed request approved.",
+                COUNTDOWN: "Feed countdown in progress.",
+                BELL: "Simulated bell stage in progress.",
+                DISPENSING: "Simulated dispensing stage in progress.",
+                COMPLETE: "Feed lifecycle complete.",
+                ARCHIVED: "Feed lifecycle archived.",
+                READY: "Ready for the next supporter."
+            };
+
+            return messages[status] || "Feed service ready.";
+        }
+
+        cleanSupporterName(name) {
+            const cleaned = String(name || "").trim();
+            return cleaned || "Anonymous supporter";
+        }
+
+        generateClientRequestId(source = "website") {
+            if (global.crypto && typeof global.crypto.randomUUID === "function") {
+                return `${source}-${global.crypto.randomUUID()}`;
+            }
+
+            return `${source}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        }
     }
 
-    cleanSupporterName(name) {
-        const cleaned = String(name || "").trim();
-        return cleaned || "Anonymous supporter";
+    if (typeof module !== "undefined" && module.exports) {
+        module.exports = { ServerEventEngine };
     }
 
-    generateEventId(source = "event") {
-        const randomPart = Math.random().toString(36).slice(2, 10);
-        return `${source}-${Date.now()}-${randomPart}`;
-    }
+    if (global) {
+        global.ServerEventEngine = ServerEventEngine;
 
-    delay(milliseconds) {
-        return new Promise(resolve => setTimeout(resolve, milliseconds));
+        if (global.document && global.CONFIG && global.alpacalyApiClient) {
+            global.eventEngine = new ServerEventEngine(
+                global.CONFIG,
+                global.alpacalyApiClient
+            );
+            global.alpacalyEventEngine = global.eventEngine;
+        }
     }
-}
-
-const eventEngine = new EventEngine(CONFIG, eventQueue, hardwareController);
+})(typeof window !== "undefined" ? window : globalThis);

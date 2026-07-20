@@ -111,18 +111,18 @@
             <div class="status-grid">
 
     <div class="status-card">
-        <strong id="feeds-remaining">20</strong>
+        <strong id="feeds-remaining">0</strong>
         <span>Feed sponsorships available</span>
     </div>
 
     <div class="status-card">
-        <strong id="countdown">02:00</strong>
-        <span>Until the next scheduled feed</span>
+        <strong id="queue-position">—</strong>
+        <span id="estimated-wait">Estimated wait: —</span>
     </div>
 
     <div class="status-card">
         <strong id="system-status">Ready</strong>
-        <span>All portions controlled by staff</span>
+        <span id="event-id">Event ID: —</span>
     </div>
 
 </div>
@@ -137,6 +137,10 @@
 
     <button id="test-sponsor">
         Test Sponsorship
+    </button>
+
+    <button id="reset-demo" type="button">
+        Reset Demo
     </button>
 
     <p id="supporter-message">
@@ -334,9 +338,9 @@
 
     </footer>
 <script src="js/config.js"></script>
-<script src="js/queue.js"></script>
-<script src="js/hardware.js"></script>
+<script src="js/api-client.js"></script>
 <script src="js/event-engine.js"></script>
+<script src="js/payment-gateway.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

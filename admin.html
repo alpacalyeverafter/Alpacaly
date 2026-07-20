@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpacaly Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navigation">
+        <div class="brand">🦙 Alpacaly Ever After</div>
+        <div class="navigation-links">
+            <a href="index.html">Home</a>
+            <a href="admin.html">Admin</a>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="hero-content">
+            <p class="label">Operations Dashboard</p>
+            <h1>Admin Overview</h1>
+            <p class="introduction">Monitor live feed activity, queue health and payment activity for the rescue barn.</p>
+        </div>
+
+        <section class="section">
+            <div class="status-grid">
+                <article class="status-card">
+                    <strong id="total-feeds-today">0</strong>
+                    <span>Total Feeds Today</span>
+                </article>
+                <article class="status-card">
+                    <strong id="feeds-remaining">0</strong>
+                    <span>Feeds Remaining</span>
+                </article>
+                <article class="status-card">
+                    <strong id="queue-size">0</strong>
+                    <span>Queue Size</span>
+                </article>
+                <article class="status-card">
+                    <strong id="total-payments">0</strong>
+                    <span>Total Payments</span>
+                </article>
+                <article class="status-card">
+                    <strong id="revenue-today">£0.00</strong>
+                    <span>Revenue Today (£)</span>
+                </article>
+                <article class="status-card">
+                    <strong id="server-status">Connecting</strong>
+                    <span>Server Status</span>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" style="padding-top: 20px; padding-bottom: 20px; text-align: left;">
+            <div class="label">Feeding Now</div>
+            <div id="feeding-now" class="status-card" style="margin-bottom: 18px; max-width: 1100px; margin-left: auto; margin-right: auto;"></div>
+
+            <div class="label">Waiting Queue</div>
+            <ul id="waiting-queue-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 0;"></ul>
+        </section>
+
+        <section class="section alternate" style="margin-top: 24px; border-radius: 16px; text-align: left;">
+            <div class="label">Recent Feed History</div>
+            <ul id="feed-history-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 20px auto 0;"></ul>
+        </section>
+
+        <section class="section" style="text-align: left;">
+            <div class="label">Operator Safety</div>
+            <div class="status-card" style="max-width: 1100px; margin: 12px auto;">
+                <strong>Emergency stop</strong>
+                <span>Immediately latch the default feeder. A reason and confirmation are required.</span>
+                <input id="emergency-stop-reason" type="text" maxlength="1000" placeholder="Reason for emergency stop" style="margin: 12px 0; padding: 10px; width: min(90%, 520px);">
+                <button id="activate-emergency-stop" class="button" type="button">Activate feeder emergency stop</button>
+            </div>
+            <div class="label">Active Emergency Stops</div>
+            <ul id="emergency-stop-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 20px;"></ul>
+            <div class="label">Pending Safety Approvals</div>
+            <ul id="approval-request-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 20px;"></ul>
+            <div class="label">Uncertain Outcome Cases</div>
+            <ul id="resolution-case-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 12px auto 0;"></ul>
+            <p id="safety-action-status" role="status" style="max-width: 1100px; margin: 16px auto 0;"></p>
+        </section>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/api-client.js"></script>
+    <script src="js/event-engine.js"></script>
+    <script src="js/payment-gateway.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

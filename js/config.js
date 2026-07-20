@@ -5,23 +5,24 @@
 
 const CONFIG = {
 
-    simulationMode: true,
+    paymentSimulationMode: true,
 
-    dailyFeedLimit: 20,
+    DEMO_MAX_FEEDS: 100,
 
-    countdownSeconds: 10,
+    apiBaseUrl: "http://localhost:3000",
 
-    feedDuration: 2000,
+    apiRequestTimeoutMs: 5000,
 
-    bellDuration: 3000,
+    apiPollIntervalMs: 5000,
 
-    completeDelay: 2000,
+    defaultBarnId: "barn_00000000-0000-4000-8000-000000000001",
 
-    feedingWindows: [
-        {
-            start: "08:00",
-            end: "18:00"
-        }
-    ]
+    defaultFeederId: "feeder_00000000-0000-4000-8000-000000000002",
+
+    developmentAdministratorIdentity: "local-admin"
 
 };
+
+if (typeof window !== "undefined") {
+    window.CONFIG = CONFIG;
+}
