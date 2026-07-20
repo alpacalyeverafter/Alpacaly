@@ -75,6 +75,33 @@ function optionalString(value) {
     return normalized || null;
 }
 
+function parsePostgresUrl(value, { production }) {
+    const candidate = optionalString(value);
+    if (!candidate) {
+        return null;
+    }
+    let parsed;
+    try {
+        parsed = new URL(candidate);
+    } catch {
+        throw new Error("DATABASE_URL must be a valid PostgreSQL URL.");
+    }
+    if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
+        throw new Error("DATABASE_URL must use the postgres:// or postgresql:// scheme.");
+    }
+    if (production) {
+        const developmentMarker = /(^|[-_.])(dev(elopment)?|test|local)([-_.]|$)/i;
+        if (["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+            throw new Error("Production PostgreSQL cannot use a loopback host.");
+        }
+        if (developmentMarker.test(decodeURIComponent(parsed.username || ""))
+            || developmentMarker.test(decodeURIComponent(parsed.pathname.slice(1)))) {
+            throw new Error("Production PostgreSQL rejects development database credentials.");
+        }
+    }
+    return candidate;
+}
+
 function parseJsonObject(value, fallback, name) {
     if (value === undefined || value === "") {
         return fallback;
@@ -105,6 +132,31 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     const corsOrigin = String(env.CORS_ORIGIN || DEFAULTS.corsOrigin).trim();
     if (!corsOrigin) {
         throw new Error("CORS_ORIGIN must not be empty.");
+    }
+
+    const centralDatabaseType = parseChoice(
+        env.CENTRAL_DATABASE_TYPE,
+        DEFAULTS.centralDatabaseType,
+        "CENTRAL_DATABASE_TYPE",
+        ["sqlite", "postgres"]
+    );
+    if (nodeEnv === "production" && centralDatabaseType !== "postgres") {
+        throw new Error("Production requires CENTRAL_DATABASE_TYPE=postgres.");
+    }
+    const postgresUrl = parsePostgresUrl(env.DATABASE_URL, {
+        production: nodeEnv === "production"
+    });
+    if (centralDatabaseType === "postgres" && !postgresUrl) {
+        throw new Error("DATABASE_URL is required when CENTRAL_DATABASE_TYPE=postgres.");
+    }
+    const postgresSslMode = parseChoice(
+        env.POSTGRES_SSL_MODE,
+        nodeEnv === "production" ? "verify-full" : DEFAULTS.postgresSslMode,
+        "POSTGRES_SSL_MODE",
+        ["disable", "require", "verify-full"]
+    );
+    if (nodeEnv === "production" && postgresSslMode !== "verify-full") {
+        throw new Error("Production PostgreSQL requires POSTGRES_SSL_MODE=verify-full.");
     }
 
     const deviceTransport = parseChoice(
@@ -258,7 +310,7 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
         }
     }
 
-    return Object.freeze({
+    const config = Object.freeze({
         serviceName: DEFAULTS.serviceName,
         nodeEnv,
         port: parseInteger(env.PORT, DEFAULTS.port, "PORT", { maximum: 65535 }),
@@ -281,7 +333,95 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
         ),
         requestBodyLimit,
         corsOrigin,
+        centralDatabaseType,
         databasePath: parseDatabasePath(env.DATABASE_PATH),
+        postgresUrl,
+        postgresSslMode,
+        postgresTlsCaPath: optionalString(env.POSTGRES_TLS_CA_PATH),
+        postgresPoolMinimum: parseInteger(
+            env.POSTGRES_POOL_MINIMUM,
+            DEFAULTS.postgresPoolMinimum,
+            "POSTGRES_POOL_MINIMUM",
+            { minimum: 0, maximum: 100 }
+        ),
+        postgresPoolMaximum: parseInteger(
+            env.POSTGRES_POOL_MAXIMUM,
+            DEFAULTS.postgresPoolMaximum,
+            "POSTGRES_POOL_MAXIMUM",
+            { minimum: 1, maximum: 200 }
+        ),
+        postgresConnectionTimeoutMs: parseInteger(
+            env.POSTGRES_CONNECTION_TIMEOUT_MS,
+            DEFAULTS.postgresConnectionTimeoutMs,
+            "POSTGRES_CONNECTION_TIMEOUT_MS",
+            { minimum: 100, maximum: 120_000 }
+        ),
+        postgresStatementTimeoutMs: parseInteger(
+            env.POSTGRES_STATEMENT_TIMEOUT_MS,
+            DEFAULTS.postgresStatementTimeoutMs,
+            "POSTGRES_STATEMENT_TIMEOUT_MS",
+            { minimum: 100, maximum: 300_000 }
+        ),
+        postgresLockTimeoutMs: parseInteger(
+            env.POSTGRES_LOCK_TIMEOUT_MS,
+            DEFAULTS.postgresLockTimeoutMs,
+            "POSTGRES_LOCK_TIMEOUT_MS",
+            { minimum: 100, maximum: 300_000 }
+        ),
+        postgresIdleTransactionTimeoutMs: parseInteger(
+            env.POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS,
+            DEFAULTS.postgresIdleTransactionTimeoutMs,
+            "POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS",
+            { minimum: 100, maximum: 300_000 }
+        ),
+        postgresApplicationName: String(
+            env.POSTGRES_APPLICATION_NAME || DEFAULTS.postgresApplicationName
+        ).trim(),
+        workerId: optionalString(env.WORKER_ID),
+        workerInstanceId: optionalString(env.WORKER_INSTANCE_ID),
+        workerSoftwareVersion: String(env.SOFTWARE_VERSION || "1.0.0").trim(),
+        workerLeaseDurationMs: parseInteger(
+            env.WORKER_LEASE_DURATION_MS,
+            DEFAULTS.workerLeaseDurationMs,
+            "WORKER_LEASE_DURATION_MS",
+            { minimum: 100, maximum: 60 * 60_000 }
+        ),
+        workerHeartbeatIntervalMs: parseInteger(
+            env.WORKER_HEARTBEAT_INTERVAL_MS,
+            DEFAULTS.workerHeartbeatIntervalMs,
+            "WORKER_HEARTBEAT_INTERVAL_MS",
+            { minimum: 50, maximum: 10 * 60_000 }
+        ),
+        workerStaleThresholdMs: parseInteger(
+            env.WORKER_STALE_THRESHOLD_MS,
+            DEFAULTS.workerStaleThresholdMs,
+            "WORKER_STALE_THRESHOLD_MS",
+            { minimum: 100, maximum: 60 * 60_000 }
+        ),
+        workerReclaimDelayMs: parseInteger(
+            env.WORKER_RECLAIM_DELAY_MS,
+            DEFAULTS.workerReclaimDelayMs,
+            "WORKER_RECLAIM_DELAY_MS",
+            { minimum: 0, maximum: 10 * 60_000 }
+        ),
+        workerMaximumClaimDurationMs: parseInteger(
+            env.WORKER_MAXIMUM_CLAIM_DURATION_MS,
+            DEFAULTS.workerMaximumClaimDurationMs,
+            "WORKER_MAXIMUM_CLAIM_DURATION_MS",
+            { minimum: 100, maximum: 24 * 60 * 60_000 }
+        ),
+        workerClockSkewToleranceMs: parseInteger(
+            env.WORKER_CLOCK_SKEW_TOLERANCE_MS,
+            DEFAULTS.workerClockSkewToleranceMs,
+            "WORKER_CLOCK_SKEW_TOLERANCE_MS",
+            { minimum: 0, maximum: 60_000 }
+        ),
+        workerMaximumAttempts: parseInteger(
+            env.WORKER_MAXIMUM_ATTEMPTS,
+            DEFAULTS.workerMaximumAttempts,
+            "WORKER_MAXIMUM_ATTEMPTS",
+            { minimum: 1, maximum: 1000 }
+        ),
         enableDemoReset: parseBoolean(
             env.ENABLE_DEMO_RESET,
             nodeEnv !== "production",
@@ -398,4 +538,22 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             { minimum: 0 }
         )
     });
+
+    if (config.postgresPoolMinimum > config.postgresPoolMaximum) {
+        throw new Error("POSTGRES_POOL_MINIMUM must not exceed POSTGRES_POOL_MAXIMUM.");
+    }
+    if (config.workerHeartbeatIntervalMs >= config.workerLeaseDurationMs) {
+        throw new Error("WORKER_HEARTBEAT_INTERVAL_MS must be shorter than the worker lease.");
+    }
+    if (config.workerLeaseDurationMs > config.workerMaximumClaimDurationMs) {
+        throw new Error("WORKER_LEASE_DURATION_MS must not exceed the maximum claim duration.");
+    }
+    if (config.workerStaleThresholdMs < config.workerLeaseDurationMs) {
+        throw new Error("WORKER_STALE_THRESHOLD_MS must be at least the worker lease duration.");
+    }
+    if (!config.postgresApplicationName) {
+        throw new Error("POSTGRES_APPLICATION_NAME must not be empty.");
+    }
+
+    return config;
 }

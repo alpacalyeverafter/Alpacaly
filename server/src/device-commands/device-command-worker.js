@@ -28,11 +28,15 @@ export class DeviceCommandWorker {
         deviceTransport = null,
         deviceAdapter = null,
         acknowledgementService,
+        claimStore,
+        workerIdentity,
         logger,
         clock = () => new Date(),
         pollIntervalMs = 100,
         acknowledgementTimeoutMs = 5000,
         retryDelayMs = 1000,
+        claimHeartbeatIntervalMs = 5000,
+        maximumClaimAttempts = 10,
         sleep = wait,
         onOutcomeUnknown = () => {}
     }) {
@@ -43,11 +47,15 @@ export class DeviceCommandWorker {
         }
         this.deviceAdapter = this.deviceTransport;
         this.acknowledgementService = acknowledgementService;
+        this.claimStore = claimStore;
+        this.workerIdentity = workerIdentity;
         this.logger = logger;
         this.clock = clock;
         this.pollIntervalMs = pollIntervalMs;
         this.acknowledgementTimeoutMs = acknowledgementTimeoutMs;
         this.retryDelayMs = retryDelayMs;
+        this.claimHeartbeatIntervalMs = claimHeartbeatIntervalMs;
+        this.maximumClaimAttempts = maximumClaimAttempts;
         this.sleep = sleep;
         this.onOutcomeUnknown = onOutcomeUnknown;
         this.safetyService = null;
@@ -57,6 +65,8 @@ export class DeviceCommandWorker {
         this.processingPoll = false;
         this.inFlight = new Map();
         this.abortController = new AbortController();
+        this.workerRegistered = false;
+        this.workerHeartbeatTimer = null;
     }
 
     start() {
@@ -67,7 +77,9 @@ export class DeviceCommandWorker {
             this.abortController = new AbortController();
         }
         this.startTransport();
+        this.ensureWorkerRegistered();
         this.started = true;
+        this.scheduleWorkerHeartbeat();
         this.reconcileOutcomeUnknownCommands();
         void this.reconcileOutstanding({ force: true });
         void this.processReadyCommands();
@@ -117,9 +129,17 @@ export class DeviceCommandWorker {
             clearTimeout(this.timer);
             this.timer = null;
         }
+        if (this.workerHeartbeatTimer) {
+            clearTimeout(this.workerHeartbeatTimer);
+            this.workerHeartbeatTimer = null;
+        }
         this.abortController.abort();
         await Promise.allSettled([...this.inFlight.values()]);
         await this.deviceTransport.shutdown();
+        if (this.workerRegistered && !this.deviceCommandStore.eventStore.closed) {
+            this.claimStore.stopWorker(this.workerIdentity);
+        }
+        this.workerRegistered = false;
         this.transportStarted = false;
     }
 
@@ -148,6 +168,99 @@ export class DeviceCommandWorker {
     }
 
     async processCommandOnce(commandId, { forceReconcile = false } = {}) {
+        this.ensureWorkerRegistered();
+        const initial = this.deviceCommandStore.getCommand(commandId);
+        if (!initial || isTerminalDeviceCommandState(initial.status)) {
+            return initial;
+        }
+        const claim = this.claimStore.claim(
+            "DEVICE_COMMAND",
+            commandId,
+            this.workerIdentity,
+            {
+                maximumAttempts: this.maximumClaimAttempts,
+                force: forceReconcile,
+                metadata: {
+                    deviceId: initial.deviceId,
+                    feederId: initial.feederId,
+                    commandType: initial.commandType
+                }
+            }
+        );
+        if (!claim) {
+            return initial;
+        }
+
+        const ownershipAbortController = new AbortController();
+        const signal = AbortSignal.any([
+            this.abortController.signal,
+            ownershipAbortController.signal
+        ]);
+        const heartbeat = setInterval(() => {
+            try {
+                const retained = this.claimStore.extend(claim, this.workerIdentity);
+                if (!retained) {
+                    ownershipAbortController.abort();
+                }
+            } catch (error) {
+                this.logger.error({
+                    event: "device_command_claim_heartbeat_failed",
+                    commandId,
+                    err: error
+                }, "Device Command ownership heartbeat failed");
+                ownershipAbortController.abort();
+            }
+        }, this.claimHeartbeatIntervalMs);
+        heartbeat.unref?.();
+
+        try {
+            const result = await this.processOwnedCommandOnce(
+                commandId,
+                { forceReconcile, signal }
+            );
+            const latest = this.deviceCommandStore.getCommand(commandId) || result;
+            if (latest?.status === "OUTCOME_UNKNOWN") {
+                this.claimStore.fail(claim, this.workerIdentity, {
+                    error: new Error(latest.lastError || "Physical outcome is unknown."),
+                    failureCode: "PHYSICAL_OUTCOME_UNKNOWN",
+                    potentiallyCompleted: true,
+                    details: { commandStatus: latest.status }
+                });
+            } else if (latest?.status === "FAILED") {
+                this.claimStore.fail(claim, this.workerIdentity, {
+                    error: new Error(latest.lastError || "Device Command failed."),
+                    failureCode: "DEVICE_COMMAND_FAILED",
+                    nonRetryable: true,
+                    details: { commandStatus: latest.status }
+                });
+            } else if (["ACKNOWLEDGED", "CANCELLED"].includes(latest?.status)) {
+                this.claimStore.complete(claim, this.workerIdentity, {
+                    commandStatus: latest.status
+                });
+            } else {
+                this.claimStore.release(claim, this.workerIdentity, {
+                    nextEligibleAt: latest?.nextAttemptAt || latest?.acknowledgementDeadline,
+                    reason: `COMMAND_${latest?.status || "UNRESOLVED"}`
+                });
+            }
+            return result;
+        } catch (error) {
+            const latest = this.deviceCommandStore.getCommand(commandId);
+            this.claimStore.fail(claim, this.workerIdentity, {
+                error,
+                retryAt: new Date(this.clock().getTime() + this.retryDelayMs).toISOString(),
+                failureCode: error?.code || "DEVICE_COMMAND_WORKER_FAILED",
+                potentiallyCompleted: ["SENT", "TIMED_OUT", "OUTCOME_UNKNOWN"]
+                    .includes(latest?.status),
+                details: { commandStatus: latest?.status }
+            });
+            throw error;
+        } finally {
+            clearInterval(heartbeat);
+        }
+    }
+
+    async processOwnedCommandOnce(commandId, { forceReconcile = false, signal } = {}) {
         let command = this.deviceCommandStore.getCommand(commandId);
         if (!command || isTerminalDeviceCommandState(command.status)) {
             return command;
@@ -195,7 +308,7 @@ export class DeviceCommandWorker {
         });
         try {
             const delivery = await this.deviceTransport.deliver(command, {
-                signal: this.abortController.signal
+                signal
             });
             // Phase 7A adapters returned an acknowledgement directly. The
             // Phase 7C transport emits acknowledgements through its receiver.
@@ -223,6 +336,32 @@ export class DeviceCommandWorker {
             });
         }
         return this.deviceCommandStore.getCommand(commandId);
+    }
+
+    ensureWorkerRegistered() {
+        if (!this.workerRegistered) {
+            this.claimStore.registerWorker(this.workerIdentity);
+            this.workerRegistered = true;
+        }
+    }
+
+    scheduleWorkerHeartbeat() {
+        if (!this.started || !this.workerRegistered) {
+            return;
+        }
+        this.workerHeartbeatTimer = setTimeout(() => {
+            this.workerHeartbeatTimer = null;
+            if (this.deviceCommandStore.eventStore.closed) {
+                this.started = false;
+                this.workerRegistered = false;
+                return;
+            }
+            if (this.started && this.workerRegistered) {
+                this.claimStore.heartbeatWorker(this.workerIdentity);
+                this.scheduleWorkerHeartbeat();
+            }
+        }, this.claimHeartbeatIntervalMs);
+        this.workerHeartbeatTimer.unref?.();
     }
 
     async reconcileCommand(command, { force = false } = {}) {

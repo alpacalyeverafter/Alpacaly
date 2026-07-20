@@ -30,6 +30,8 @@ function createTestApp(overrides = {}) {
 test("production configuration disables development contribution simulation by default", () => {
     const config = loadConfig({
         NODE_ENV: "production",
+        CENTRAL_DATABASE_TYPE: "postgres",
+        DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly",
         DATABASE_PATH: ":memory:",
         ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION: "true"
     }, { loadEnvFile: false });
@@ -43,6 +45,19 @@ test("GET /health reports service health", async () => {
     assert.equal(response.body.service, "alpacaly-server");
     assert.equal(response.body.environment, "test");
     assert.ok(response.headers["x-request-id"]);
+});
+
+test("GET /health/ready reports sanitized persistence readiness", async () => {
+    const response = await request(createTestApp()).get("/health/ready").expect(200);
+
+    assert.equal(response.body.status, "ready");
+    assert.deepEqual(response.body.persistence, {
+        databaseType: "sqlite",
+        schemaVersion: 11,
+        reachable: true
+    });
+    assert.equal(response.body.workerCoordination.reachable, true);
+    assert.equal(JSON.stringify(response.body).includes("DATABASE_URL"), false);
 });
 
 test("GET /api/event-engine/status reports safe queue totals", async () => {

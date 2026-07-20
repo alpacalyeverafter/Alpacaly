@@ -385,18 +385,26 @@ test("stale retained assignment state cannot replace a newer generation", () => 
 test("production MQTT configuration fails closed without MQTT 5 mTLS and signing", () => {
     assert.throws(() => loadConfig({
         NODE_ENV: "production",
+        CENTRAL_DATABASE_TYPE: "postgres",
+        DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly",
         DEVICE_TRANSPORT: "mqtt",
         MQTT_BROKER_URL: "mqtt://localhost:1883",
         MQTT_DEVELOPMENT_KEYS: "false"
     }, { loadEnvFile: false }), /mqtts:\/\//);
     assert.throws(() => loadConfig({
         NODE_ENV: "production",
+        CENTRAL_DATABASE_TYPE: "postgres",
+        DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly",
         DEVICE_TRANSPORT: "mqtt",
         MQTT_BROKER_URL: "mqtts://localhost:8883",
         MQTT_PROTOCOL_VERSION: "4",
         MQTT_DEVELOPMENT_KEYS: "false"
     }, { loadEnvFile: false }), /MQTT 5/);
-    const inProcess = loadConfig({ NODE_ENV: "production" }, { loadEnvFile: false });
+    const inProcess = loadConfig({
+        NODE_ENV: "production",
+        CENTRAL_DATABASE_TYPE: "postgres",
+        DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly"
+    }, { loadEnvFile: false });
     assert.equal(inProcess.deviceTransport, "in_process");
 });
 

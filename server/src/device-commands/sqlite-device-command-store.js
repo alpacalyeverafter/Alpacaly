@@ -319,6 +319,7 @@ export class SqliteDeviceCommandStore {
             ? DEFAULT_DEVICE_ID
             : `device_simulated_${feederId}`;
         return this.eventStore.transaction(() => {
+            this.lockAllocation(`assignment:${feederId}`);
             const concurrent = this.statements.selectAssignment.get(feederId);
             if (concurrent) {
                 return { ...concurrent };
@@ -347,6 +348,7 @@ export class SqliteDeviceCommandStore {
         }
 
         return this.eventStore.transaction(() => {
+            this.lockAllocation(`fencing:${command.feederId}`);
             const concurrent = mapCommand(
                 this.statements.selectOriginalCommandByEventAction.get(
                     command.eventId,
@@ -406,6 +408,7 @@ export class SqliteDeviceCommandStore {
             return { command: existing, created: false };
         }
         return this.eventStore.transaction(() => {
+            this.lockAllocation(`fencing:${command.feederId}`);
             const concurrent = command.resolutionCaseId
                 ? mapCommand(this.statements.selectCommandByResolutionCase.get(
                     command.resolutionCaseId
@@ -855,6 +858,7 @@ export class SqliteDeviceCommandStore {
             return { execution: existing, created: false };
         }
         return this.eventStore.transaction(() => {
+            this.lockAllocation(`execution:${command.deviceId}`);
             const concurrent = this.readSimulatedExecution(command.commandId);
             if (concurrent) {
                 return { execution: concurrent, created: false };
@@ -915,5 +919,13 @@ export class SqliteDeviceCommandStore {
             acknowledgement: parseJson(row.acknowledgementJson),
             actionCount: row.actionCount
         } : null;
+    }
+
+    lockAllocation(key) {
+        if (this.eventStore.databaseType === "postgres") {
+            this.database.prepare(`
+                SELECT pg_advisory_xact_lock(hashtext(?))
+            `).get(`alpacaly-device:${key}`);
+        }
     }
 }

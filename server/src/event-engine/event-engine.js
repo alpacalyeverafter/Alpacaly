@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import { ApplicationError } from "../errors/application-error.js";
-import { SqliteEventStore } from "../event-store/sqlite-event-store.js";
+import { createCentralEventStore } from "../event-store/central-event-store.js";
+import { createDistributedClaimStore } from "../worker-coordination/distributed-claim-store.js";
+import { createWorkerIdentity } from "../worker-coordination/worker-identity.js";
 import { FeederQueueManager } from "./feeder-queue-manager.js";
 import {
     FEED_LIFECYCLE_STATES,
@@ -76,10 +78,19 @@ export class EventEngine {
         this.idGenerator = idGenerator;
         this.sleep = sleep;
         this.autoProcess = autoProcess;
-        this.eventStore = eventStore || new SqliteEventStore({
-            databasePath: config.databasePath || ":memory:",
-            logger
+        this.eventStore = eventStore || createCentralEventStore({ config, logger });
+        this.lifecycleClaimStore = createDistributedClaimStore({
+            eventStore: this.eventStore,
+            config,
+            clock
         });
+        this.lifecycleWorkerIdentity = createWorkerIdentity({
+            config,
+            serviceType: "event-lifecycle",
+            clock
+        });
+        this.lifecycleClaimStore.registerWorker(this.lifecycleWorkerIdentity);
+        this.lifecycleWorkerHeartbeatTimer = null;
         this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
         this.deviceCommandService = null;
         this.safetyService = null;
@@ -94,6 +105,7 @@ export class EventEngine {
         this.listeners = new Set();
         this.idleResolvers = new Set();
         this.shutdownResolvers = new Set();
+        this.coordinationRetryTimers = new Map();
 
         this.lifecycleGeneration = 0;
         this.lifecycleAbortController = new AbortController();
@@ -103,6 +115,7 @@ export class EventEngine {
         this.currentDateKey = localDateKey(this.clock());
 
         this.restoreFromEventStore();
+        this.scheduleLifecycleWorkerHeartbeat();
         this.scheduleProcessing();
     }
 
@@ -110,7 +123,8 @@ export class EventEngine {
         feederId = this.defaultResourceAssignment.feederId,
         feedIntentId,
         contributionId,
-        auditRecord = null
+        auditRecord = null,
+        workClaim = null
     } = {}) {
         if (typeof feedIntentId !== "string" || !feedIntentId.trim()) {
             throw new ApplicationError(
@@ -169,13 +183,17 @@ export class EventEngine {
 
         const previousSequenceNumber = this.sequenceNumber;
         const previousLastUpdatedAt = this.lastUpdatedAt;
+        const sequenceNumber = this.eventStore.allocateEventSequence(
+            this.sequenceNumber + 1
+        );
+        this.sequenceNumber = Math.max(this.sequenceNumber, sequenceNumber);
         const feedRequest = {
             id,
             eventId: id,
             type: "FEED_REQUEST",
             state: null,
             status: null,
-            sequenceNumber: ++this.sequenceNumber,
+            sequenceNumber,
             supporterName: input.supporterName,
             source: input.source,
             message: input.message,
@@ -227,7 +245,10 @@ export class EventEngine {
         try {
             this.eventStore.createQueuedEvent(feedRequest, {
                 auditRecord,
-                feedIntentId: feedRequest.feedIntentId
+                feedIntentId: feedRequest.feedIntentId,
+                workClaim,
+                dailyLimit: this.config.maxDailyFeeds,
+                dateKey: localDateKey(now)
             });
         } catch (error) {
             this.feedRequests.delete(id);
@@ -244,6 +265,12 @@ export class EventEngine {
                 eventId: id,
                 err: error
             }, "Feed request could not be persisted");
+            if (error?.code === "DAILY_FEED_LIMIT_REACHED") {
+                throw new ApplicationError(
+                    "Today's safe feeding limit has been reached.",
+                    { code: "DAILY_FEED_LIMIT_REACHED", statusCode: 409 }
+                );
+            }
             throw new ApplicationError("The feed request could not be stored.", {
                 code: "EVENT_STORE_WRITE_FAILED",
                 statusCode: 500
@@ -547,7 +574,7 @@ export class EventEngine {
                     break;
                 }
                 const eventId = queueRuntime.eventIds[0];
-                const feedRequest = this.feedRequests.get(eventId);
+                let feedRequest = this.feedRequests.get(eventId);
 
                 if (!feedRequest || this.processedEventIds.has(eventId)) {
                     this.eventStore.removeFromQueue(eventId);
@@ -569,17 +596,103 @@ export class EventEngine {
                     });
                 }
 
+                const claim = this.lifecycleClaimStore.claim(
+                    "EVENT_LIFECYCLE",
+                    eventId,
+                    this.lifecycleWorkerIdentity,
+                    {
+                        maximumAttempts: this.config.workerMaximumAttempts,
+                        metadata: {
+                            feederId: feedRequest.feederId,
+                            queueId: feedRequest.queueId
+                        }
+                    }
+                );
+                if (!claim) {
+                    const existingClaim = this.lifecycleClaimStore.get(
+                        "EVENT_LIFECYCLE",
+                        eventId
+                    );
+                    if (existingClaim?.state === "COMPLETED") {
+                        const persisted = this.eventStore.loadState();
+                        const current = persisted.events.find(
+                            event => event.eventId === eventId
+                        );
+                        if (current) {
+                            this.feedRequests.set(eventId, current);
+                        }
+                        this.eventStore.removeFromQueue(eventId);
+                        queueRuntime.eventIds.shift();
+                        this.processedEventIds.add(eventId);
+                        queueRuntime.archivedEventIds.push(eventId);
+                        continue;
+                    }
+                    this.scheduleCoordinationRetry(feederId);
+                    break;
+                }
+
+                const persisted = this.eventStore.loadState();
+                const current = persisted.events.find(event => event.eventId === eventId);
+                if (current) {
+                    feedRequest = current;
+                    this.feedRequests.set(eventId, current);
+                }
+
+                let ownershipLost = false;
+                const claimHeartbeat = setInterval(() => {
+                    try {
+                        if (!this.lifecycleClaimStore.extend(
+                            claim,
+                            this.lifecycleWorkerIdentity
+                        )) {
+                            ownershipLost = true;
+                        }
+                    } catch (error) {
+                        ownershipLost = true;
+                        this.logger.error({
+                            event: "event_lifecycle_claim_heartbeat_failed",
+                            eventId,
+                            err: error
+                        }, "Event lifecycle ownership heartbeat failed");
+                    }
+                    if (ownershipLost) {
+                        this.lifecycleGeneration += 1;
+                        this.lifecycleAbortController.abort();
+                    }
+                }, this.config.workerHeartbeatIntervalMs || 5000);
+                claimHeartbeat.unref?.();
+
                 this.processingEventIds.add(eventId);
                 queueRuntime.activeEventId = eventId;
 
                 let archived = false;
                 try {
                     archived = await this.runLifecycle(feedRequest, generation);
+                } catch (error) {
+                    this.lifecycleClaimStore.fail(
+                        claim,
+                        this.lifecycleWorkerIdentity,
+                        {
+                            error,
+                            retryAt: this.clock().toISOString(),
+                            failureCode: error?.code || "EVENT_LIFECYCLE_FAILED",
+                            details: { state: feedRequest.state }
+                        }
+                    );
+                    throw error;
                 } finally {
+                    clearInterval(claimHeartbeat);
                     this.processingEventIds.delete(eventId);
                 }
 
                 if (!archived || generation !== this.lifecycleGeneration) {
+                    if (!ownershipLost) {
+                        this.lifecycleClaimStore.release(
+                            claim,
+                            this.lifecycleWorkerIdentity,
+                            { reason: "LIFECYCLE_PAUSED" }
+                        );
+                    }
                     break;
                 }
 
@@ -595,6 +708,13 @@ export class EventEngine {
                 this.processedEventIds.add(eventId);
                 queueRuntime.archivedEventIds.push(eventId);
                 queueRuntime.activeEventId = null;
+                if (!this.lifecycleClaimStore.complete(
+                    claim,
+                    this.lifecycleWorkerIdentity,
+                    { state: "ARCHIVED" }
+                )) {
+                    throw new Error(`Lifecycle ownership of Event ${eventId} was lost.`);
+                }
                 this.emitEngineUpdate("EVENT_ARCHIVED", queueRuntime.feederId);
             }
         } catch (error) {
@@ -604,6 +724,7 @@ export class EventEngine {
                 feederId: queueRuntime.feederId,
                 err: error
             }, "Event lifecycle failed");
+            this.scheduleCoordinationRetry(feederId);
         } finally {
             if (generation === this.lifecycleGeneration || this.shuttingDown) {
                 queueRuntime.processing = false;
@@ -730,7 +851,7 @@ export class EventEngine {
             }
 
             this.transitionTo(feedRequest, "ARCHIVED", {
-                archive: "SQLITE"
+                archive: "DURABLE_EVENT_STORE"
             });
         }
 
@@ -1138,6 +1259,33 @@ export class EventEngine {
         });
     }
 
+    scheduleCoordinationRetry(feederId) {
+        if (this.coordinationRetryTimers.has(feederId) || this.shuttingDown) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            this.coordinationRetryTimers.delete(feederId);
+            this.scheduleProcessing(feederId);
+        }, Math.min(this.config.workerLeaseDurationMs || 30_000, 5000));
+        timer.unref?.();
+        this.coordinationRetryTimers.set(feederId, timer);
+    }
+
+    scheduleLifecycleWorkerHeartbeat() {
+        if (this.shuttingDown || this.eventStore.closed) {
+            return;
+        }
+        this.lifecycleWorkerHeartbeatTimer = setTimeout(() => {
+            this.lifecycleWorkerHeartbeatTimer = null;
+            if (this.shuttingDown || this.eventStore.closed) {
+                return;
+            }
+            this.lifecycleClaimStore.heartbeatWorker(this.lifecycleWorkerIdentity);
+            this.scheduleLifecycleWorkerHeartbeat();
+        }, this.config.workerHeartbeatIntervalMs || 5000);
+        this.lifecycleWorkerHeartbeatTimer.unref?.();
+    }
+
     resolveIdleWaiters() {
         if (!this.isCompletelyIdle()) {
             return;
@@ -1333,6 +1481,13 @@ export class EventEngine {
             throw new Error("Event Engine cannot close while lifecycle processing is active.");
         }
 
+        this.coordinationRetryTimers.forEach(clearTimeout);
+        this.coordinationRetryTimers.clear();
+        if (this.lifecycleWorkerHeartbeatTimer) {
+            clearTimeout(this.lifecycleWorkerHeartbeatTimer);
+            this.lifecycleWorkerHeartbeatTimer = null;
+        }
+        this.lifecycleClaimStore.stopWorker(this.lifecycleWorkerIdentity);
         this.eventStore.close();
     }
 
@@ -1355,6 +1510,13 @@ export class EventEngine {
         this.queueRuntimes.forEach(queueRuntime => {
             queueRuntime.processingScheduled = false;
         });
+        this.coordinationRetryTimers.forEach(clearTimeout);
+        this.coordinationRetryTimers.clear();
+        if (this.lifecycleWorkerHeartbeatTimer) {
+            clearTimeout(this.lifecycleWorkerHeartbeatTimer);
+            this.lifecycleWorkerHeartbeatTimer = null;
+        }
+        this.lifecycleClaimStore.stopWorker(this.lifecycleWorkerIdentity);
         this.eventStore.close();
     }
 }

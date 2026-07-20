@@ -110,28 +110,41 @@ function mapAuditRecord(row) {
 }
 
 export class SqliteEventStore {
-    constructor({ databasePath, logger }) {
-        if (!databasePath) {
+    constructor({
+        databasePath,
+        logger,
+        database = null,
+        databaseType = "sqlite",
+        migrationRunner = runEventStoreMigrations
+    }) {
+        if (!databasePath && !database) {
             throw new Error("SqliteEventStore requires a databasePath.");
         }
 
         this.databasePath = databasePath;
+        this.databaseType = databaseType;
         this.logger = logger;
         this.closed = false;
 
-        if (databasePath !== ":memory:") {
+        if (!database && databasePath !== ":memory:") {
             mkdirSync(dirname(databasePath), { recursive: true });
         }
 
-        this.database = new DatabaseSync(databasePath);
-        this.configureConnection();
-        this.schemaVersion = runEventStoreMigrations(this.database, logger);
+        this.database = database || new DatabaseSync(databasePath);
+        if (databaseType === "sqlite") {
+            this.configureConnection();
+        }
+        this.schemaVersion = migrationRunner(this.database, logger);
         this.prepareStatements();
 
         this.logger.info({
             event: "event_store_connected",
-            databasePath: databasePath === ":memory:" ? ":memory:" : databasePath
-        }, "SQLite Event Store connected");
+            databaseType,
+            ...(databaseType === "sqlite" ? {
+                databasePath: databasePath === ":memory:" ? ":memory:" : databasePath
+            } : {}),
+            schemaVersion: this.schemaVersion
+        }, `${databaseType === "postgres" ? "PostgreSQL" : "SQLite"} Event Store connected`);
     }
 
     configureConnection() {
@@ -363,9 +376,16 @@ export class SqliteEventStore {
                 LIMIT ?
             `),
             selectProcessingOutbox: this.database.prepare(`
-                SELECT *
-                FROM Outbox
-                WHERE status = 'PROCESSING'
+                SELECT outbox.*
+                FROM Outbox AS outbox
+                WHERE outbox.status = 'PROCESSING'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM DistributedWorkClaims AS claim
+                      WHERE claim.workType = 'FEED_INTENT'
+                        AND claim.workItemId = outbox.feedIntentId
+                        AND claim.state = 'ACTIVE'
+                        AND claim.leaseExpiresAt > CURRENT_TIMESTAMP
+                  )
                 ORDER BY outboxSequence ASC
             `),
             claimOutboxEntry: this.database.prepare(`
@@ -643,13 +663,22 @@ export class SqliteEventStore {
                 SELECT operationalStatus, operationalReason, operationalUpdatedAt
                 FROM Feeders
                 WHERE feederId = ?
+            `),
+            reserveDailyFeed: this.database.prepare(`
+                INSERT INTO DailyFeedReservations (
+                    queueId, dateKey, acceptedCount, updatedAt
+                ) VALUES (?, ?, 1, ?)
+                ON CONFLICT (queueId, dateKey) DO UPDATE SET
+                    acceptedCount = DailyFeedReservations.acceptedCount + 1,
+                    updatedAt = excluded.updatedAt
+                WHERE DailyFeedReservations.acceptedCount < ?
             `)
         };
     }
 
     transaction(callback) {
         this.assertOpen();
-        this.database.exec("BEGIN IMMEDIATE;");
+        this.database.exec(this.databaseType === "postgres" ? "BEGIN;" : "BEGIN IMMEDIATE;");
         try {
             const result = callback();
             this.database.exec("COMMIT;");
@@ -1100,6 +1129,31 @@ export class SqliteEventStore {
         return processingEntries.map(entry => entry.feedIntentId);
     }
 
+    recoverInterruptedFeedIntent(feedIntentId, recoveredAt) {
+        return this.transaction(() => {
+            const outboxResult = this.statements.recoverOutboxEntry.run(
+                recoveredAt,
+                recoveredAt,
+                feedIntentId
+            );
+            const intentResult = this.statements.recoverFeedIntent.run(
+                recoveredAt,
+                feedIntentId
+            );
+            if (Number(outboxResult.changes) !== 1
+                || Number(intentResult.changes) !== 1) {
+                return false;
+            }
+            this.insertFeedIntentHistory(
+                feedIntentId,
+                "PROCESSING_RECOVERED",
+                recoveredAt,
+                { reason: "LEASE_RECLAIM" }
+            );
+            return true;
+        });
+    }
+
     insertFeedIntentHistory(feedIntentId, action, timestamp, details) {
         this.statements.insertFeedIntentHistory.run(
             feedIntentId,
@@ -1124,9 +1178,27 @@ export class SqliteEventStore {
     createQueuedEvent(feedRequest, {
         queuePosition = feedRequest.sequenceNumber,
         auditRecord = null,
-        feedIntentId = feedRequest.feedIntentId
+        feedIntentId = feedRequest.feedIntentId,
+        workClaim = null,
+        dailyLimit = null,
+        dateKey = null
     } = {}) {
         this.transaction(() => {
+            if (dailyLimit !== null && dateKey !== null) {
+                const reservation = this.statements.reserveDailyFeed.run(
+                    feedRequest.queueId,
+                    dateKey,
+                    feedRequest.requestedAt,
+                    dailyLimit
+                );
+                if (Number(reservation.changes) !== 1) {
+                    const error = new Error(
+                        "The daily feed limit was reached concurrently."
+                    );
+                    error.code = "DAILY_FEED_LIMIT_REACHED";
+                    throw error;
+                }
+            }
             this.statements.insertEvent.run(
                 feedRequest.eventId,
                 feedRequest.type,
@@ -1209,6 +1281,16 @@ export class SqliteEventStore {
                 queuedAt,
                 { eventId: feedRequest.eventId }
             );
+            if (workClaim && !workClaim.claimStore.completeWithinTransaction(
+                workClaim.claim,
+                workClaim.identity,
+                queuedAt,
+                { eventId: feedRequest.eventId, atomicWithDomainCommit: true }
+            )) {
+                throw new Error(
+                    `Distributed ownership of FeedIntent ${feedIntentId} was lost.`
+                );
+            }
         });
     }
 
@@ -1375,6 +1457,7 @@ export class SqliteEventStore {
                 DELETE FROM FeedIntents;
                 DELETE FROM Contributions;
                 DELETE FROM ProviderEvents;
+                DELETE FROM DailyFeedReservations;
                 UPDATE Feeders
                 SET safetyStatus = 'ONLINE', safetyReason = NULL,
                     safetyUpdatedAt = NULL;
@@ -1393,8 +1476,26 @@ export class SqliteEventStore {
         return this.schemaVersion;
     }
 
+    allocateEventSequence(candidate) {
+        this.assertOpen();
+        if (this.databaseType === "postgres") {
+            return Number(this.database.prepare(`
+                SELECT nextval('alpacalyeventsequence') AS sequenceNumber
+            `).get().sequenceNumber);
+        }
+        return candidate;
+    }
+
     getTableNames() {
         this.assertOpen();
+        if (this.databaseType === "postgres") {
+            return this.database.prepare(`
+                SELECT table_name AS name
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+                ORDER BY table_name ASC
+            `).all().map(row => row.name);
+        }
         return this.database.prepare(`
             SELECT name
             FROM sqlite_schema
@@ -1414,7 +1515,22 @@ export class SqliteEventStore {
 
     assertOpen() {
         if (this.closed) {
-            throw new Error("SQLite Event Store is closed.");
+            throw new Error(`${this.databaseType === "postgres" ? "PostgreSQL" : "SQLite"} Event Store is closed.`);
         }
+    }
+
+    getPersistenceDiagnostics() {
+        this.assertOpen();
+        const database = this.databaseType === "postgres"
+            ? this.database.getDiagnostics()
+            : {
+                integrity: this.database.prepare("PRAGMA integrity_check;").get().integrity_check,
+                mode: this.databasePath === ":memory:" ? "memory" : "file"
+            };
+        return {
+            databaseType: this.databaseType,
+            schemaVersion: this.schemaVersion,
+            database
+        };
     }
 }

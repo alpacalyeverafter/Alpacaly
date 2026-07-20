@@ -19,8 +19,11 @@ import {
 import {
     migration010EdgeControllerVisibility
 } from "./010-edge-controller-visibility.js";
+import {
+    migration011DistributedWorkerCoordination
+} from "./011-distributed-worker-coordination.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 10;
+export const EVENT_STORE_SCHEMA_VERSION = 11;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -32,7 +35,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration007OperatorSafety,
     migration008SimulatedDeviceControllers,
     migration009SecureMqttTransport,
-    migration010EdgeControllerVisibility
+    migration010EdgeControllerVisibility,
+    migration011DistributedWorkerCoordination
 ]);
 
 function readUserVersion(database) {

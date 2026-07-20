@@ -5,10 +5,13 @@ import { FeedIntentOutboxWorker } from "./feed-intent-outbox-worker.js";
 import { FeedIntentService } from "./feed-intent-service.js";
 import { FeedRequestService } from "./feed-request-service.js";
 import { ProviderEventIngestionService } from "./provider-event-ingestion-service.js";
+import { createDistributedClaimStore } from "../worker-coordination/distributed-claim-store.js";
+import { createWorkerIdentity } from "../worker-coordination/worker-identity.js";
 
 export function createContributionLedgerServices({
     eventEngine,
     eventStore = eventEngine.eventStore,
+    config = eventEngine.config || {},
     logger,
     clock = () => new Date(),
     idGenerator,
@@ -16,6 +19,12 @@ export function createContributionLedgerServices({
     outboxPollIntervalMs,
     outboxRetryDelayMs
 }) {
+    const claimStore = createDistributedClaimStore({ eventStore, config, clock });
+    const workerIdentity = createWorkerIdentity({
+        config,
+        serviceType: "feed-intent-outbox",
+        clock
+    });
     const common = {
         eventStore,
         logger,
@@ -43,6 +52,10 @@ export function createContributionLedgerServices({
         eventEngine,
         feedIntentService,
         feedRequestService,
+        claimStore,
+        workerIdentity,
+        heartbeatIntervalMs: config.workerHeartbeatIntervalMs,
+        maximumAttempts: config.workerMaximumAttempts,
         ...(outboxPollIntervalMs === undefined
             ? {}
             : { pollIntervalMs: outboxPollIntervalMs }),
@@ -69,6 +82,8 @@ export function createContributionLedgerServices({
         feedIntentService,
         feedRequestService,
         outboxWorker,
+        claimStore,
+        workerIdentity,
         developmentWebsiteContributionService
     };
 }

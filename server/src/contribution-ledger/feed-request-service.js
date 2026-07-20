@@ -19,7 +19,7 @@ export class FeedRequestService {
         this.idGenerator = idGenerator;
     }
 
-    createFromFeedIntent(feedIntentId) {
+    createFromFeedIntent(feedIntentId, { workClaim = null } = {}) {
         const feedIntent = this.eventStore.getFeedIntent(feedIntentId);
         if (!feedIntent) {
             throw new Error(`FeedIntent ${feedIntentId} was not found.`);
@@ -60,7 +60,8 @@ export class FeedRequestService {
             feedIntentId,
             feederId: feedIntent.feederId,
             contributionId: contribution.contributionId,
-            auditRecord
+            auditRecord,
+            workClaim
         });
 
         this.logger.info({

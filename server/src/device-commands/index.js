@@ -3,6 +3,8 @@ import { DeviceCommandService } from "./device-command-service.js";
 import { DeviceCommandWorker } from "./device-command-worker.js";
 import { SqliteDeviceCommandStore } from "./sqlite-device-command-store.js";
 import { createDeviceControllerServices } from "../device-controllers/index.js";
+import { createDistributedClaimStore } from "../worker-coordination/distributed-claim-store.js";
+import { createWorkerIdentity } from "../worker-coordination/worker-identity.js";
 
 export function createDeviceCommandServices({
     eventEngine,
@@ -17,6 +19,12 @@ export function createDeviceCommandServices({
     mqttConnect,
     startWorker = false
 }) {
+    const claimStore = createDistributedClaimStore({ eventStore, config, clock });
+    const workerIdentity = createWorkerIdentity({
+        config,
+        serviceType: "device-command",
+        clock
+    });
     const deviceCommandStore = new SqliteDeviceCommandStore({
         eventStore,
         ...(idGenerator ? { idGenerator } : {})
@@ -69,11 +77,15 @@ export function createDeviceCommandServices({
         deviceCommandStore,
         deviceTransport,
         acknowledgementService,
+        claimStore,
+        workerIdentity,
         logger,
         clock,
         pollIntervalMs: config.deviceCommandPollIntervalMs,
         acknowledgementTimeoutMs: config.deviceAcknowledgementTimeoutMs,
         retryDelayMs: config.deviceCommandRetryDelayMs,
+        claimHeartbeatIntervalMs: config.workerHeartbeatIntervalMs,
+        maximumClaimAttempts: config.workerMaximumAttempts,
         ...(workerSleep ? { sleep: workerSleep } : {}),
         onOutcomeUnknown: command => {
             deviceCommandService.commandOutcomeUnknown(command);
@@ -94,6 +106,8 @@ export function createDeviceCommandServices({
         ...controllerServices,
         acknowledgementService,
         deviceCommandService,
-        worker
+        worker,
+        claimStore,
+        workerIdentity
     };
 }

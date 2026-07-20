@@ -330,7 +330,7 @@ test("persists ledger idempotency, Contribution links and audit history across r
             "FEED_REQUEST_CREATED"
         ])
     );
-    assert.equal(restored.eventStore.getSchemaVersion(), 10);
+    assert.equal(restored.eventStore.getSchemaVersion(), 11);
 
     restored.eventEngine.close();
 });
@@ -410,7 +410,7 @@ test("migrates the Phase 6B schema without changing persisted Event data", t => 
         migrated.eventStore.getProviderEvent(contribution.providerEventId).verificationStatus,
         "VERIFIED"
     );
-    assert.equal(migrated.eventStore.getSchemaVersion(), 10);
+    assert.equal(migrated.eventStore.getSchemaVersion(), 11);
     assert.deepEqual(
         migrated.eventStore.database.prepare("PRAGMA foreign_key_check;").all(),
         []

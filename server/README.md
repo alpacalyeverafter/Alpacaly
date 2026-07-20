@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7E-2 backend and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, MQTT protocol evidence, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
+This directory contains the Phase 7F-2A backend and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
-## Phase 7E-2 boundaries
+## Phase 7F-2A boundaries
 
 Included:
 
@@ -85,6 +85,11 @@ Included:
 - Structured JSON application and HTTP request logs
 - Automated unit and API tests
 - Automated SQLite schema and restart-recovery tests
+- PostgreSQL central persistence with transactional, checksummed migrations
+- Durable multi-worker identities, claims, leases, heartbeats, fencing, bounded
+  retries, dead-letter state, and operator-review state
+- Real PostgreSQL and two-process contention tests in CI
+- Offline SQLite-to-PostgreSQL migration and reconciliation tooling
 
 Intentionally excluded:
 
@@ -96,7 +101,7 @@ Intentionally excluded:
 - Camera integration or streaming
 - Live-video integration
 
-SQLite is the durable source of truth. ProviderEvent ingestion, Contribution verification, FeedIntent authorisation, Feed Request creation, lifecycle coordination, Device Command creation, delivery, and acknowledgement handling are separate responsibilities. A crash can leave only durable pending work or a fully committed result. Workers reconcile unfinished FeedIntent and Device Command work on startup. Database uniqueness prevents repeated work from creating another Event or another command for the same Event action. Persistent simulated device execution memory and fencing prevent a replay from performing a command twice or allowing an older command to overtake a newer device token. The Event Engine still maintains one isolated runtime per feeder, while the original website and read APIs remain scoped to the default feeder.
+PostgreSQL is the central production source of truth; SQLite provides the same central contract for local development and tests. ProviderEvent ingestion, Contribution verification, FeedIntent authorisation, Feed Request creation, lifecycle coordination, Device Command creation, delivery, and acknowledgement handling remain separate responsibilities. Durable claims and database constraints make crash recovery and cross-process ownership explicit. The detailed production contract, configuration, migration procedure, diagnostics, testing, contention baseline, and rollout guidance are in [`docs/postgresql-persistence.md`](docs/postgresql-persistence.md).
 
 ## Requirements
 
@@ -127,7 +132,17 @@ The default server address is `http://localhost:3000`.
 | `FEEDING_WINDOW_END` | `18:00` | Local end time in 24-hour format. |
 | `REQUEST_BODY_LIMIT` | `16kb` | Maximum JSON request-body size accepted by Express. |
 | `CORS_ORIGIN` | `*` | Browser origin allowed to call the API. Restrict this before production. |
+| `CENTRAL_DATABASE_TYPE` | `sqlite` | Selects `sqlite` outside production or `postgres`; production requires PostgreSQL. |
 | `DATABASE_PATH` | `./data/alpacaly.sqlite` | SQLite Event Store path, resolved from the server working directory. |
+| `DATABASE_URL` | unset | PostgreSQL connection secret. Required for the PostgreSQL central store and never logged. |
+| `POSTGRES_SSL_MODE` | `disable` outside production | `disable`, `require`, or `verify-full`; production requires `verify-full`. |
+| `POSTGRES_POOL_MINIMUM`, `POSTGRES_POOL_MAXIMUM` | `0`, `10` | Per-process central database connection bounds. |
+| `POSTGRES_CONNECTION_TIMEOUT_MS` | `5000` | Maximum connection establishment wait. |
+| `POSTGRES_STATEMENT_TIMEOUT_MS`, `POSTGRES_LOCK_TIMEOUT_MS` | `15000`, `5000` | Database statement and lock wait bounds. |
+| `POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS` | `15000` | Fails abandoned database transactions closed. |
+| `WORKER_LEASE_DURATION_MS`, `WORKER_HEARTBEAT_INTERVAL_MS` | `30000`, `5000` | Distributed ownership lease and renewal cadence. |
+| `WORKER_MAXIMUM_CLAIM_DURATION_MS` | `300000` | Hard non-extendable ownership duration. |
+| `WORKER_MAXIMUM_ATTEMPTS` | `10` | Bound before safe work enters dead-letter state. |
 | `ENABLE_DEMO_RESET` | development only | Enables the Reset Demo button and reset endpoint outside production. |
 | `ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION` | development only | Enables simulated WEBSITE Contributions and legacy write adapters. Always disabled when `NODE_ENV=production`. |
 | `ENABLE_DEVELOPMENT_AUTHENTICATION` | `false` | Explicitly enables server-controlled local administrator identities in development or test. It is always rejected in production. The example development environment enables it. |
@@ -168,9 +183,9 @@ The default server address is `http://localhost:3000`.
 
 ## Persistent Event Store
 
-The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
+The central Event Store uses PostgreSQL in production and `node:sqlite` for zero-setup development/testing. File-backed SQLite databases retain foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout. The independent edge journal remains SQLite in every environment.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Migration 9 adds fenced controller-assignment generations, authority leases, boot/liveness state, edge evidence, MQTT delivery/replay records, retained safety generations, and append-only protocol/assignment history. Migration 10 adds the backend read model for signed edge status snapshots and append-only summaries. The independent edge journal has its own schema version 1 and database file. Existing durable data is preserved in place.
+The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 11 adds daily feed reservations and distributed worker coordination. PostgreSQL migrations create the equivalent central schema, native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
 
 ## Simulated controller and MQTT architecture
 

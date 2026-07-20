@@ -33,6 +33,7 @@ export function createApp(options = {}) {
     const contributionLedgerServices = options.contributionLedgerServices
         || createContributionLedgerServices({
             eventEngine,
+            config,
             logger,
             clock: eventEngine.clock,
             startOutboxWorker: true,
@@ -79,7 +80,15 @@ export function createApp(options = {}) {
     app.use(requestLogger(logger));
     app.use(express.json({ limit: config.requestBodyLimit }));
 
-    app.use("/health", createHealthRouter({ config }));
+    app.use("/health", createHealthRouter({
+        config,
+        eventStore: eventEngine.eventStore,
+        claimStores: [
+            eventEngine.lifecycleClaimStore,
+            contributionLedgerServices.claimStore,
+            deviceCommandServices.claimStore
+        ].filter(Boolean)
+    }));
     app.use("/api/feed-requests", createFeedRequestsRouter({
         eventEngine,
         config,
@@ -106,6 +115,7 @@ export function createApp(options = {}) {
         config,
         administratorSecurityServices,
         deviceCommandServices,
+        contributionLedgerServices,
         operatorSafetyServices
     }));
     app.use("/api/event-engine", createEventEngineRouter({

@@ -98,6 +98,7 @@ export function createAdministratorRouter({
     config,
     administratorSecurityServices,
     deviceCommandServices,
+    contributionLedgerServices,
     operatorSafetyServices
 }) {
     const router = Router();
@@ -107,6 +108,43 @@ export function createAdministratorRouter({
     const safety = operatorSafetyServices;
     const controllers = deviceCommandServices.controllerService;
     const controllerStore = deviceCommandServices.controllerStore;
+
+    router.get(
+        "/diagnostics/persistence",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SECURITY_CONFIGURATION,
+            () => ({ targetType: "PERSISTENCE_DIAGNOSTICS" }),
+            { platformWide: true }
+        ),
+        (req, res) => {
+            const persistence = eventEngine.eventStore.getPersistenceDiagnostics();
+            const outboxBacklog = eventEngine.eventStore.database.prepare(`
+                SELECT status, COUNT(*) AS count
+                FROM Outbox GROUP BY status ORDER BY status
+            `).all();
+            const commandBacklog = eventEngine.eventStore.database.prepare(`
+                SELECT status, COUNT(*) AS count
+                FROM DeviceCommands GROUP BY status ORDER BY status
+            `).all();
+            res.status(200).json({
+                persistence,
+                coordination: {
+                    feedIntents: contributionLedgerServices.claimStore.getDiagnostics(),
+                    deviceCommands: deviceCommandServices.claimStore.getDiagnostics()
+                },
+                backlog: {
+                    feedIntents: Object.fromEntries(outboxBacklog.map(
+                        row => [row.status, Number(row.count)]
+                    )),
+                    deviceCommands: Object.fromEntries(commandBacklog.map(
+                        row => [row.status, Number(row.count)]
+                    ))
+                },
+                requestId: req.requestId
+            });
+        }
+    );
 
     router.get("/session", (req, res) => {
         const identity = req.administratorIdentity;

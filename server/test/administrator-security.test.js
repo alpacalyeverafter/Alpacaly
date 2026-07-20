@@ -45,6 +45,8 @@ test("development authentication requires explicit non-production configuration"
     }, { loadEnvFile: false });
     const production = loadConfig({
         NODE_ENV: "production",
+        CENTRAL_DATABASE_TYPE: "postgres",
+        DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly",
         DATABASE_PATH: ":memory:",
         ENABLE_DEVELOPMENT_AUTHENTICATION: "true"
     }, { loadEnvFile: false });
@@ -126,6 +128,28 @@ test("development identities authenticate through server-controlled mappings", a
         .get("/api/admin/session")
         .set("authorization", "Development caller-selected-ADMINISTRATOR")
         .expect(401);
+    await closeApp(app);
+});
+
+test("persistence diagnostics are platform-protected and secret-free", async () => {
+    const app = createTestApp();
+    await request(app).get("/api/admin/diagnostics/persistence").expect(401);
+    await request(app)
+        .get("/api/admin/diagnostics/persistence")
+        .set("authorization", AUTHORIZATION.viewer)
+        .expect(403);
+    const response = await request(app)
+        .get("/api/admin/diagnostics/persistence")
+        .set("authorization", AUTHORIZATION.admin)
+        .expect(200);
+
+    assert.equal(response.body.persistence.databaseType, "sqlite");
+    assert.equal(response.body.persistence.schemaVersion, 11);
+    assert.ok(response.body.coordination.feedIntents.claims);
+    const serialized = JSON.stringify(response.body).toLowerCase();
+    assert.equal(serialized.includes("database_url"), false);
+    assert.equal(serialized.includes("password"), false);
+    assert.equal(serialized.includes("postgresql://"), false);
     await closeApp(app);
 });
 
