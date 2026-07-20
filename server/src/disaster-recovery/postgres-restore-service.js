@@ -50,6 +50,16 @@ function writeRestoreReport(reportPath, report) {
     });
 }
 
+export function createPostgresRestoreArguments(targetName, archivePath) {
+    return [
+        "--exit-on-error",
+        "--no-owner",
+        "--no-privileges",
+        `--dbname=${targetName}`,
+        archivePath
+    ];
+}
+
 async function inspectTarget(connectionString, config) {
     const client = createPostgresClient(connectionString, {
         sslMode: config.postgresSslMode,
@@ -190,12 +200,10 @@ export async function restorePostgresBackup({
             await resetTarget(targetConnectionString, config);
         }
 
-        await commandRunner(pgRestoreBinary, [
-            "--exit-on-error",
-            "--no-owner",
-            "--no-privileges",
+        await commandRunner(pgRestoreBinary, createPostgresRestoreArguments(
+            targetName,
             resolve(dirname(manifestPath), manifest.artifact.fileName)
-        ], {
+        ), {
             connectionString: targetConnectionString,
             sslMode: config.postgresSslMode,
             tlsCaPath: config.postgresTlsCaPath

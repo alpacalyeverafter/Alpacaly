@@ -6,6 +6,9 @@ import {
     createPostgresToolEnvironment,
     runPostgresTool
 } from "../src/disaster-recovery/postgres-tools.js";
+import {
+    createPostgresRestoreArguments
+} from "../src/disaster-recovery/postgres-restore-service.js";
 
 function successfulSpawn(calls) {
     return (binary, args, options) => {
@@ -110,19 +113,33 @@ test("pg_dump and pg_restore share secret-safe environment-only connections", as
         "--format=custom",
         "--file=/safe/backup.dump"
     ], options);
-    await runPostgresTool("pg_restore", [
-        "--exit-on-error",
+    await runPostgresTool("pg_restore", createPostgresRestoreArguments(
+        "native_tool_database",
         "/safe/backup.dump"
-    ], options);
+    ), options);
 
     assert.deepEqual(calls.map(call => call.binary), ["pg_dump", "pg_restore"]);
     assert.deepEqual(calls[0].options.env, calls[1].options.env);
     assert.equal(calls[0].options.env.PGHOST, "postgres.example");
     assert.equal(calls[0].options.env.PGPASSWORD, "native tool password");
     assert.equal(calls[0].options.env.PGSERVICE, undefined);
-    const commandArguments = calls.flatMap(call => call.args);
-    assert.equal(commandArguments.includes(connectionString), false);
-    assert.equal(commandArguments.some(argument => (
+    const restoreArguments = calls[1].args;
+    assert.deepEqual(restoreArguments, [
+        "--exit-on-error",
+        "--no-owner",
+        "--no-privileges",
+        "--dbname=native_tool_database",
+        "/safe/backup.dump"
+    ]);
+    assert.equal(restoreArguments.at(-1), "/safe/backup.dump");
+    assert.equal(restoreArguments.some(argument => (
+        argument === "--file" || argument.startsWith("--file=")
+    )), false);
+    assert.equal(restoreArguments.includes(connectionString), false);
+    assert.equal(restoreArguments.some(argument => (
+        argument.includes("native-tool-user")
+    )), false);
+    assert.equal(restoreArguments.some(argument => (
         argument.includes("native tool password")
     )), false);
 });
