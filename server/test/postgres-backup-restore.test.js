@@ -218,6 +218,16 @@ test("PostgreSQL native backup restores safely into a disposable database", {
             SELECT COUNT(*) AS count FROM OperatorAuditRecords
         `).get().count)
     };
+    assert.equal(
+        sourceDevices.deviceCommandStore.getCommand(safeCommand.commandId).status,
+        "CANCELLED",
+        "The platform emergency stop must cancel the pending RING_BELL command before backup."
+    );
+    assert.equal(
+        sourceDevices.deviceCommandStore.getCommand(uncertainCommand.commandId).status,
+        "OUTCOME_UNKNOWN",
+        "The uncertain DISPENSE_FEED command must remain OUTCOME_UNKNOWN before backup."
+    );
     const backup = await createPostgresBackup({
         config: sourceConfig,
         outputDirectory,
@@ -264,11 +274,33 @@ test("PostgreSQL native backup restores safely into a disposable database", {
         "PASS",
         `Blocked reconciliation checks: ${JSON.stringify(blockedChecks)}`
     );
-    assert.equal(restored.report.workersStarted, false);
-    assert.equal(restored.report.feedingStarted, false);
+    assert.equal(
+        restored.report.workersStarted,
+        false,
+        "Restore safety must leave workers stopped."
+    );
+    assert.equal(
+        restored.report.feedingStarted,
+        false,
+        "Restore safety must leave feeding stopped."
+    );
     assert.equal(restored.report.claimFencing.fenced >= 1, true);
-    assert.equal(restored.report.commandClassification.counts.PROVEN_NOT_SENT, 1);
-    assert.equal(restored.report.commandClassification.counts.OUTCOME_UNKNOWN, 1);
+    assert.deepEqual(
+        restored.report.commandClassification,
+        {
+            total: 2,
+            counts: {
+                PROVEN_NOT_SENT: 0,
+                UNCERTAIN: 0,
+                COMPLETED: 1,
+                OUTCOME_UNKNOWN: 1
+            },
+            unresolved: 1
+        },
+        `Unexpected restored command classification: ${JSON.stringify(
+            restored.report.commandClassification
+        )}`
+    );
 
     const restoredStore = new PostgresEventStore({
         config: targetConfig,
@@ -279,13 +311,17 @@ test("PostgreSQL native backup restores safely into a disposable database", {
         config: { recoverySafetyMode: false },
         logger
     });
-    assert.equal(recovery.isBlocked(), true);
+    assert.equal(
+        recovery.isBlocked(),
+        true,
+        "Recovery safety mode must remain blocked immediately after restore."
+    );
     assert.equal(Number(restoredStore.database.prepare(`
         SELECT COUNT(*) AS count FROM EmergencyStops WHERE status = 'ACTIVE'
-    `).get().count), 1);
+    `).get().count), 1, "The active platform emergency stop must survive restore.");
     assert.equal(Number(restoredStore.database.prepare(`
         SELECT COUNT(*) AS count FROM OperatorResolutionCases WHERE status = 'OPEN'
-    `).get().count), 1);
+    `).get().count), 1, "The open OUTCOME_UNKNOWN resolution case must survive restore.");
     assert.equal(Number(restoredStore.database.prepare(`
         SELECT COUNT(*) AS count FROM OperatorAuditRecords
     `).get().count), beforeCounts.audit);
@@ -303,20 +339,31 @@ test("PostgreSQL native backup restores safely into a disposable database", {
     `).get().state, "COMPLETED");
     assert.throws(
         () => recovery.assertCommandMayProgress(uncertainCommand.commandId),
-        error => error.code === "RECOVERY_SAFETY_MODE_ACTIVE"
+        error => error.code === "RECOVERY_SAFETY_MODE_ACTIVE",
+        "Recovery safety mode must block the OUTCOME_UNKNOWN command before worker release."
     );
 
     const safeRelease = recovery.releaseSafeWork({
         decisionId: "restore-drill-safe-work-review"
     });
-    assert.equal(safeRelease.released, 1);
+    assert.equal(
+        safeRelease.released,
+        0,
+        "No PROVEN_NOT_SENT command exists in this restore fixture to release."
+    );
+    assert.equal(
+        safeRelease.unresolved,
+        1,
+        "The OUTCOME_UNKNOWN command must remain unresolved after safe-work release."
+    );
     const workerRelease = recovery.releaseWorkers({
         decisionId: "restore-drill-supervised-release"
     });
     assert.equal(workerRelease.mode, "NORMAL");
     assert.throws(
         () => recovery.assertCommandMayProgress(uncertainCommand.commandId),
-        error => error.code === "RESTORED_COMMAND_REVIEW_REQUIRED"
+        error => error.code === "RESTORED_COMMAND_REVIEW_REQUIRED",
+        "The OUTCOME_UNKNOWN command must remain individually blocked after worker release."
     );
     restoredStore.close();
 
@@ -368,7 +415,8 @@ test("PostgreSQL native backup restores safely into a disposable database", {
     );
     assert.equal(
         releasedDevices.deviceCommandStore.getCommand(safeCommand.commandId).status,
-        "PENDING"
+        "CANCELLED",
+        "The emergency-stop-cancelled RING_BELL command must remain CANCELLED after restore."
     );
     await releasedDevices.worker.stop();
     releasedLedger.outboxWorker.stop();

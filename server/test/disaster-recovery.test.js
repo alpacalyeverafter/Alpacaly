@@ -348,6 +348,50 @@ test("restore fencing invalidates old workers and individually locks uncertain c
     context.eventEngine.close();
 });
 
+test("releaseSafeWork releases only genuinely proven-not-sent restored commands", async () => {
+    const context = createCentralContext();
+    const feed = context.ledger.developmentWebsiteContributionService.simulate({
+        supporterName: "Safe restored work fixture",
+        clientRequestId: "safe-restored-work-fixture"
+    }).feedRequest;
+    const command = context.devices.deviceCommandService.ensureCommandForEvent(
+        feed,
+        "RING_BELL"
+    ).command;
+    assert.equal(command.status, "READY");
+
+    const recovery = context.eventEngine.recoverySafetyService;
+    recovery.markRestored({ backupId: "backup-proven-not-sent" });
+    const classifications = recovery.classifyRestoredCommands({
+        backupId: "backup-proven-not-sent"
+    });
+    assert.deepEqual(classifications, {
+        total: 1,
+        counts: {
+            PROVEN_NOT_SENT: 1,
+            UNCERTAIN: 0,
+            COMPLETED: 0,
+            OUTCOME_UNKNOWN: 0
+        },
+        unresolved: 1
+    });
+
+    const firstRelease = recovery.releaseSafeWork({
+        decisionId: "approved-safe-work-release"
+    });
+    assert.deepEqual(firstRelease, { released: 1, unresolved: 0 });
+    assert.equal(context.eventEngine.eventStore.database.prepare(`
+        SELECT reviewStatus FROM RestoredCommandReviews WHERE commandId = ?
+    `).get(command.commandId).reviewStatus, "SAFE_WORK_RELEASED");
+    assert.deepEqual(recovery.releaseSafeWork({
+        decisionId: "duplicate-safe-work-release"
+    }), { released: 0, unresolved: 0 });
+
+    await context.devices.worker.stop();
+    context.ledger.outboxWorker.stop();
+    context.eventEngine.close();
+});
+
 test("emergency stops, OUTCOME_UNKNOWN cases and audit history survive recovery blocking", async t => {
     const directory = temporaryDirectory(t, "alpacaly-recovery-persistence-");
     const databasePath = join(directory, "central.sqlite");
