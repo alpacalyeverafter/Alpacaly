@@ -195,7 +195,11 @@ export async function restorePostgresBackup({
             "--no-owner",
             "--no-privileges",
             resolve(dirname(manifestPath), manifest.artifact.fileName)
-        ], { connectionString: targetConnectionString });
+        ], {
+            connectionString: targetConnectionString,
+            sslMode: config.postgresSslMode,
+            tlsCaPath: config.postgresTlsCaPath
+        });
 
         const restoredVersion = await restoredSchemaVersion(
             targetConnectionString,

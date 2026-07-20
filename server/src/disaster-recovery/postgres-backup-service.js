@@ -142,7 +142,9 @@ export async function createPostgresBackup({
             "--serializable-deferrable",
             `--file=${partialPath}`
         ], {
-            connectionString: config.postgresUrl
+            connectionString: config.postgresUrl,
+            sslMode: config.postgresSslMode,
+            tlsCaPath: config.postgresTlsCaPath
         });
         renameSync(partialPath, artifactPath);
         const checksum = await sha256File(artifactPath);
