@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7D-2 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, MQTT protocol evidence, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
+This directory contains the Phase 7E-2 backend and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, MQTT protocol evidence, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
-## Phase 7D-2 boundaries
+## Phase 7E-2 boundaries
 
 Included:
 
@@ -35,6 +35,12 @@ Included:
 - Durable assignment generations, authority leases, delivery/replay evidence,
   protocol events, controller boot identity, and reconnect reconciliation
 - Embedded loopback broker tests requiring no manual broker installation
+- Separately runnable Barn edge-controller process with its own SQLite journal
+- Hardware abstraction and deterministic PLC/microcontroller safety simulation
+- One-use cycle tokens, watchdog, hard output bounds, and outputs-OFF defaults
+- Event-scoped bell/dispense reservations with versioned sensor evidence
+- Durable welfare/calibration gates, maintenance mode, and restart recovery
+- Protected, signed, secret-free edge-controller administrator visibility
 - Persistent simulated controller identities and Barn/Feeder assignments
 - Durable controller execution journals and restart-safe action memory
 - `ACCEPTED`, `STARTED`, and `SUCCEEDED` acknowledgement progression
@@ -146,6 +152,15 @@ The default server address is `http://localhost:3000`.
 | `SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS` | `5000` | Interval between in-process controller heartbeats. |
 | `SIMULATED_CONTROLLER_HEARTBEAT_TIMEOUT_MS` | `15000` | Age after which the backend reports an online controller as `STALE`. |
 | `ENABLE_SIMULATED_CONTROLLER_CONFIGURATION` | development only | Enables protected behaviour, connection, and restart controls. Always disabled when `NODE_ENV=production`. |
+| `EDGE_CALIBRATION_VERSION` | `simulated-calibration-v1` | Calibration version placed in new backend Device Commands. |
+| `EDGE_WELFARE_CONFIGURATION_VERSION` | `edge-welfare-v1` | Welfare version placed in new backend Device Commands. |
+| `EDGE_DATABASE_PATH` | `./data/barn-edge.sqlite` | Independent local journal for the separately runnable edge process. |
+| `EDGE_CONTROLLER_ID`, `EDGE_BARN_ID`, `EDGE_FEEDER_IDS` | default resources | Fixed identities assigned to the edge process. |
+| `EDGE_BARN_TIMEZONE` | `Europe/London` | IANA timezone used for local permitted feeding windows. |
+| `EDGE_BOOTSTRAP_SIMULATED_FIXTURES` | `false` | Explicitly installs short-lived simulator-only welfare/calibration fixtures in non-production modes. |
+| `EDGE_BELL_DURATION_MS`, `EDGE_COUNTDOWN_DURATION_MS` | `3000`, `10000` | Local edge bell and countdown timing; neither grants motor authority. |
+| `EDGE_WATCHDOG_PULSE_MS` | `100` | Required safety-controller watchdog pulse interval. |
+| `EDGE_BELL_FAILURE_POLICY` | `CANCEL` | Safer default cancels before STARTED if the bell fails. |
 | `LIFECYCLE_COUNTDOWN_MS` | `10000` | Simulated countdown duration before the bell stage. |
 | `LIFECYCLE_BELL_MS` | `3000` | Simulated bell-stage duration. No bell hardware is controlled. |
 | `LIFECYCLE_DISPENSING_MS` | `2000` | Simulated dispensing-stage duration. No feeder hardware is controlled. |
@@ -155,11 +170,11 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Migration 9 adds fenced controller-assignment generations, authority leases, boot/liveness state, edge evidence, MQTT delivery/replay records, retained safety generations, and append-only protocol/assignment history. Existing durable data is preserved in place.
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Migration 9 adds fenced controller-assignment generations, authority leases, boot/liveness state, edge evidence, MQTT delivery/replay records, retained safety generations, and append-only protocol/assignment history. Migration 10 adds the backend read model for signed edge status snapshots and append-only summaries. The independent edge journal has its own schema version 1 and database file. Existing durable data is preserved in place.
 
 ## Simulated controller and MQTT architecture
 
-The Device Command worker depends only on `DeviceTransport`. Phase 7D-2 keeps the
+The Device Command worker depends only on `DeviceTransport`. Phase 7E-2 keeps the
 `InProcessDeviceTransport` and adds `MqttDeviceTransport` behind configuration.
 The MQTT adapter handles connection/reconnect, signed publishing, inbound
 acknowledgements/heartbeats/status, retained assignments/safety state,
@@ -191,6 +206,12 @@ handling, X.509 expectations, ACL model, retention, fencing, leases, emergency
 stops, journal/reconciliation rules, configuration, broker limitations, and
 remaining simulations are documented in
 [`docs/secure-mqtt-transport.md`](docs/secure-mqtt-transport.md).
+
+The independent journal, hardware abstraction, safety-controller handshake,
+feed-cycle reservation, evidence rules, welfare/calibration gates, maintenance,
+recovery, configuration safeguards, simulator controls, administrator view, and
+future adapter boundary are documented in
+[`docs/barn-edge-controller.md`](docs/barn-edge-controller.md).
 
 ## Operator safety flow
 

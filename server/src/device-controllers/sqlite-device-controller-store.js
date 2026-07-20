@@ -302,6 +302,31 @@ export class SqliteDeviceControllerStore {
             `),
             selectSafetyStates: this.database.prepare(`
                 SELECT * FROM MqttSafetyStates ORDER BY scopeKey ASC
+            `),
+            upsertEdgeStatus: this.database.prepare(`
+                INSERT INTO EdgeControllerStatus (
+                    controllerId, controllerBootId, bootCounter,
+                    statusVersion, statusJson, receivedAt
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(controllerId) DO UPDATE SET
+                    controllerBootId=excluded.controllerBootId,
+                    bootCounter=excluded.bootCounter,
+                    statusVersion=excluded.statusVersion,
+                    statusJson=excluded.statusJson,
+                    receivedAt=excluded.receivedAt
+            `),
+            insertEdgeStatusHistory: this.database.prepare(`
+                INSERT INTO EdgeControllerStatusHistory (
+                    controllerId, controllerBootId, bootCounter,
+                    statusVersion, receivedAt, summaryJson
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            `),
+            selectEdgeStatus: this.database.prepare(`
+                SELECT * FROM EdgeControllerStatus WHERE controllerId = ?
+            `),
+            selectEdgeStatusHistory: this.database.prepare(`
+                SELECT * FROM EdgeControllerStatusHistory
+                WHERE controllerId = ? ORDER BY statusSequence DESC LIMIT ?
             `)
         };
     }
@@ -911,6 +936,70 @@ export class SqliteDeviceControllerStore {
             controllerId,
             normalizedLimit
         ).map(row => ({ ...row, details: parseJson(row.detailsJson) }));
+    }
+
+    recordEdgeStatus(controllerId, envelope, timestamp = this.clock().toISOString()) {
+        this.requireController(controllerId);
+        const status = envelope.edgeStatus;
+        if (!status || typeof status !== "object" || Array.isArray(status)) {
+            throw new Error("Signed edge status is required.");
+        }
+        const statusVersion = String(status.statusVersion || "1.0").slice(0, 100);
+        const serialized = serializeJson(status);
+        if (Buffer.byteLength(serialized, "utf8") > 256 * 1024) {
+            throw new Error("Signed edge status exceeds the persistence limit.");
+        }
+        this.eventStore.transaction(() => {
+            this.statements.upsertEdgeStatus.run(
+                controllerId,
+                envelope.controllerBootId,
+                envelope.bootCounter,
+                statusVersion,
+                serialized,
+                timestamp
+            );
+            this.statements.insertEdgeStatusHistory.run(
+                controllerId,
+                envelope.controllerBootId,
+                envelope.bootCounter,
+                statusVersion,
+                timestamp,
+                serializeJson({
+                    currentCycleState: status.currentCycle?.state || null,
+                    maintenanceState: status.maintenance?.state || null,
+                    safetyControllerReady: status.safetyController?.ready ?? null,
+                    watchdogHealthy: status.safetyController?.watchdogHealthy ?? null,
+                    lockoutReasons: status.lockoutReasons || [],
+                    pendingAcknowledgements: status.journal?.pendingAcknowledgements ?? null
+                })
+            );
+        });
+        return this.getEdgeStatus(controllerId);
+    }
+
+    getEdgeStatus(controllerId, limit = 50) {
+        this.requireController(controllerId);
+        const row = this.statements.selectEdgeStatus.get(controllerId);
+        if (!row) return null;
+        const normalizedLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+        return {
+            controllerId: row.controllerId,
+            controllerBootId: row.controllerBootId,
+            bootCounter: row.bootCounter,
+            statusVersion: row.statusVersion,
+            receivedAt: row.receivedAt,
+            status: parseJson(row.statusJson),
+            history: this.statements.selectEdgeStatusHistory
+                .all(controllerId, normalizedLimit)
+                .map(item => ({
+                    statusSequence: item.statusSequence,
+                    controllerBootId: item.controllerBootId,
+                    bootCounter: item.bootCounter,
+                    statusVersion: item.statusVersion,
+                    receivedAt: item.receivedAt,
+                    summary: parseJson(item.summaryJson)
+                }))
+        };
     }
 
     updateSafetyState({

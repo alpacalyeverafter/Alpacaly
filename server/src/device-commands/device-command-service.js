@@ -10,6 +10,7 @@ export class DeviceCommandService {
     constructor({
         deviceCommandStore,
         eventStore,
+        config = {},
         logger,
         maximumAttempts = 3,
         clock = () => new Date(),
@@ -19,6 +20,7 @@ export class DeviceCommandService {
     }) {
         this.deviceCommandStore = deviceCommandStore;
         this.eventStore = eventStore;
+        this.config = config;
         this.logger = logger;
         this.maximumAttempts = maximumAttempts;
         this.clock = clock;
@@ -76,11 +78,21 @@ export class DeviceCommandService {
         const contribution = this.eventStore.getContribution(
             feedRequest.contributionId
         );
+        const calibrationVersion = this.config.edgeCalibrationVersion
+            || "simulated-calibration-v1";
+        const welfareConfigurationVersion =
+            this.config.edgeWelfareConfigurationVersion
+            || "edge-welfare-v1";
         const commandPayload = normalizedType === "RING_BELL"
-            ? { pattern: "STANDARD_FEED_BELL" }
+            ? {
+                pattern: "STANDARD_FEED_BELL",
+                welfareConfigurationVersion
+            }
             : {
                 quantity: contribution?.feedQuantity || 1,
-                unit: "FEED_PORTION"
+                unit: "FEED_PORTION",
+                calibrationVersion,
+                welfareConfigurationVersion
             };
         const command = createDeviceCommand({
             eventId: feedRequest.eventId,

@@ -57,6 +57,8 @@ test("creates the required persistent Event Store tables", t => {
         "DeviceCommandOutbox",
         "DeviceCommands",
         "Devices",
+        "EdgeControllerStatus",
+        "EdgeControllerStatusHistory",
         "EmergencyStops",
         "Events",
         "FeedIntentHistory",
@@ -85,7 +87,7 @@ test("creates the required persistent Event Store tables", t => {
         "WelfareNotes",
         "WelfareSafetyLedger"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 9);
+    assert.equal(engine.eventStore.getSchemaVersion(), 10);
 
     engine.close();
 });

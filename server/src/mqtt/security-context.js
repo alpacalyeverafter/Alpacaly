@@ -74,3 +74,48 @@ export function createMqttSecurityContext(config) {
         })
     };
 }
+
+export function createEdgeMqttSecurityContext(config) {
+    const environment = config.mqttEnvironment
+        || (config.mode === "production" ? "production" : config.mode || "development");
+    const development = config.mode !== "production"
+        && config.mqttDevelopmentKeys !== false;
+    const controllerKeyId = config.mqttControllerSigningKeyId
+        || DEVELOPMENT_MQTT_KEYS.controller.keyId;
+    const controllerPrivateKey = config.mqttControllerSigningPrivateKey
+        || (development ? DEVELOPMENT_MQTT_KEYS.controller.privateKey : null);
+    const serverPublicKeys = { ...(config.mqttServerSigningPublicKeys || {}) };
+    if (development) {
+        serverPublicKeys[DEVELOPMENT_MQTT_KEYS.server.keyId] = {
+            publicKey: DEVELOPMENT_MQTT_KEYS.server.publicKey,
+            environment,
+            development: true
+        };
+    }
+    if (!controllerPrivateKey) {
+        throw new MessageSecurityError(
+            "Edge controller application-message signing is not configured.",
+            "MQTT_CONTROLLER_SIGNING_KEY_REQUIRED"
+        );
+    }
+    if (Object.keys(serverPublicKeys).length === 0) {
+        throw new MessageSecurityError(
+            "No server verification keys are configured for the edge controller.",
+            "MQTT_SERVER_VERIFICATION_KEYS_REQUIRED"
+        );
+    }
+    return {
+        environment,
+        controllerSigner: new Ed25519MessageSigner({
+            keyId: controllerKeyId,
+            privateKey: controllerPrivateKey,
+            environment,
+            development
+        }),
+        serverVerifier: new Ed25519MessageVerifier({
+            keys: serverPublicKeys,
+            environment,
+            production: config.mode === "production"
+        })
+    };
+}

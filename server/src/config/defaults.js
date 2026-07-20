@@ -38,6 +38,8 @@ export const DEFAULTS = Object.freeze({
     simulatedControllerHeartbeatIntervalMs: 5000,
     simulatedControllerHeartbeatTimeoutMs: 15000,
     enableSimulatedControllerConfiguration: true,
+    edgeCalibrationVersion: "simulated-calibration-v1",
+    edgeWelfareConfigurationVersion: "edge-welfare-v1",
     lifecycleCountdownMs: 10000,
     lifecycleBellMs: 3000,
     lifecycleDispensingMs: 2000,

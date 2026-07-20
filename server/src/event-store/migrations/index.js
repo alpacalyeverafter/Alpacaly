@@ -16,8 +16,11 @@ import {
 import {
     migration009SecureMqttTransport
 } from "./009-secure-mqtt-transport.js";
+import {
+    migration010EdgeControllerVisibility
+} from "./010-edge-controller-visibility.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 9;
+export const EVENT_STORE_SCHEMA_VERSION = 10;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -28,7 +31,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration006AdministratorSecurityFoundation,
     migration007OperatorSafety,
     migration008SimulatedDeviceControllers,
-    migration009SecureMqttTransport
+    migration009SecureMqttTransport,
+    migration010EdgeControllerVisibility
 ]);
 
 function readUserVersion(database) {

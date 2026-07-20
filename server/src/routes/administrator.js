@@ -784,6 +784,31 @@ export function createAdministratorRouter({
         }
     );
 
+    router.get(
+        [
+            "/device-controllers/:controllerId/edge",
+            "/device-controllers/:controllerId/edge-status"
+        ],
+        authorize(
+            services,
+            PERMISSIONS.VIEW_DEVICE_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    edge: controllers.getEdgeVisibility(
+                        req.params.controllerId,
+                        req.query.limit
+                    ),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
     router.post(
         "/device-controllers/:controllerId/status",
         authorize(

@@ -451,6 +451,13 @@ export class MqttDeviceTransport extends DeviceTransport {
                 timestamp: this.clock().toISOString()
             }
         );
+        if (!heartbeat && validated.edgeStatus && !update.stale) {
+            this.store.recordEdgeStatus(
+                validated.controllerId,
+                validated,
+                this.clock().toISOString()
+            );
+        }
         if (update.stale) {
             this.recordEvent({
                 eventType: "STALE_CONTROLLER_STATE",

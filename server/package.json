@@ -9,6 +9,8 @@
   },
   "scripts": {
     "dev": "node --watch src/server.js",
+    "edge:dev": "node --watch src/edge-controller/process.js",
+    "edge:start": "node src/edge-controller/process.js",
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1 test/*.test.js"
   },

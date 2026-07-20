@@ -366,6 +366,13 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
                 DEFAULTS.enableSimulatedControllerConfiguration,
                 "ENABLE_SIMULATED_CONTROLLER_CONFIGURATION"
             ),
+        edgeCalibrationVersion: String(
+            env.EDGE_CALIBRATION_VERSION || DEFAULTS.edgeCalibrationVersion
+        ).trim(),
+        edgeWelfareConfigurationVersion: String(
+            env.EDGE_WELFARE_CONFIGURATION_VERSION
+                || DEFAULTS.edgeWelfareConfigurationVersion
+        ).trim(),
         lifecycleCountdownMs: parseInteger(
             env.LIFECYCLE_COUNTDOWN_MS,
             DEFAULTS.lifecycleCountdownMs,

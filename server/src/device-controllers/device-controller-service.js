@@ -213,6 +213,11 @@ export class DeviceControllerService {
         };
     }
 
+    getEdgeVisibility(controllerId, limit = 50) {
+        this.get(controllerId);
+        return this.store.getEdgeStatus(controllerId, limit);
+    }
+
     setConnectionState(controllerId, state, context) {
         this.assertDevelopmentConfigurationAllowed();
         const before = this.get(controllerId);

@@ -59,6 +59,7 @@ export function createDeviceCommandServices({
     deviceCommandService = new DeviceCommandService({
         deviceCommandStore,
         eventStore,
+        config,
         logger,
         clock,
         maximumAttempts: config.deviceCommandMaximumAttempts,

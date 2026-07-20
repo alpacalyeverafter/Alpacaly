@@ -307,7 +307,8 @@ export function createStatusEnvelope({
     status,
     occurredAt,
     expiresAt,
-    signer
+    signer,
+    edgeStatus = null
 }) {
     return signer.sign({
         protocolVersion: MQTT_PROTOCOL_VERSION,
@@ -320,7 +321,8 @@ export function createStatusEnvelope({
         sequence,
         status,
         occurredAt,
-        expiresAt
+        expiresAt,
+        ...(edgeStatus ? { edgeStatus } : {})
     });
 }
 
@@ -362,6 +364,9 @@ export function validateControllerStateEnvelope(envelope, {
                 "Controller status is unsupported.",
                 "MQTT_CONTROLLER_STATUS_INVALID"
             );
+        }
+        if (envelope.edgeStatus !== undefined) {
+            requireObject(envelope.edgeStatus, "edgeStatus");
         }
     }
     verifier.verify(envelope);
