@@ -1,16 +1,8 @@
-export class DeviceAdapter {
-    start() {}
+import { DeviceTransport } from "./device-transport.js";
 
-    async deliver() {
-        throw new Error("DeviceAdapter.deliver must be implemented.");
-    }
-
-    async reconcile() {
-        throw new Error("DeviceAdapter.reconcile must be implemented.");
-    }
-
-    async shutdown() {}
-}
+// Backward-compatible Phase 7A name. New delivery implementations use the
+// transport contract, while existing injected adapters remain valid transports.
+export class DeviceAdapter extends DeviceTransport {}
 
 export class DeviceUnavailableError extends Error {
     constructor(message = "The target device is unavailable.") {

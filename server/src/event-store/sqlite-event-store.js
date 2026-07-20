@@ -1353,6 +1353,8 @@ export class SqliteEventStore {
                 DELETE FROM WelfareSafetyLedger;
                 DELETE FROM ApprovalDecisions;
                 DELETE FROM ApprovalRequestHistory;
+                DELETE FROM SimulatedControllerJournalHistory;
+                DELETE FROM SimulatedControllerCommandJournal;
                 DELETE FROM DeviceAcknowledgements;
                 DELETE FROM SimulatedDeviceExecutions;
                 DELETE FROM SimulatedDeviceFences;

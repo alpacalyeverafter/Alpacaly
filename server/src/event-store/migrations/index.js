@@ -10,8 +10,11 @@ import {
     migration006AdministratorSecurityFoundation
 } from "./006-administrator-security-foundation.js";
 import { migration007OperatorSafety } from "./007-operator-safety.js";
+import {
+    migration008SimulatedDeviceControllers
+} from "./008-simulated-device-controllers.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 7;
+export const EVENT_STORE_SCHEMA_VERSION = 8;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -20,7 +23,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration004DurableFeedIntentOutbox,
     migration005DurableDeviceCommands,
     migration006AdministratorSecurityFoundation,
-    migration007OperatorSafety
+    migration007OperatorSafety,
+    migration008SimulatedDeviceControllers
 ]);
 
 function readUserVersion(database) {

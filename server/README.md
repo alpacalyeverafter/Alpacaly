@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7B-2 backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, acknowledgements, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral adapter boundary.
+This directory contains the Phase 7C backend for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. It persists provider-neutral contribution records, FeedIntent work, lifecycle state, device commands, administrator identities, scoped permissions, emergency stops, dual approvals, uncertain-outcome cases, immutable operator audit records, simulated controller identities, acknowledgements, execution journals, and recovery history in SQLite. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a hardware-neutral transport boundary.
 
-## Phase 7B-2 boundaries
+## Phase 7C boundaries
 
 Included:
 
@@ -26,7 +26,13 @@ Included:
 - Database-enforced one-to-one FeedIntent-to-Event processing
 - Durable `RING_BELL` and `DISPENSE_FEED` DeviceCommands with one command per Event action
 - Persistent Device Command Outbox, state history, acknowledgements, and audit records
-- Hardware-neutral `DeviceAdapter` boundary with a simulated adapter only
+- Hardware-neutral `DeviceTransport` contract with an in-process transport
+- Persistent simulated controller identities and Barn/Feeder assignments
+- Durable controller execution journals and restart-safe action memory
+- `ACCEPTED`, `STARTED`, and `SUCCEEDED` acknowledgement progression
+- Deterministic success, delay, loss, rejection, failure, disconnect, restart,
+  heartbeat-loss, malformed-message, and wrong-resource simulation modes
+- Protected controller status, execution, configuration, connection, and restart APIs
 - Acknowledgement-gated `BELL` and `DISPENSING` lifecycle advancement
 - Per-feeder command ordering, idempotent command IDs, monotonic fencing tokens, retry, timeout, and unknown-outcome handling
 - Restart-safe simulated device execution memory that prevents duplicate physical simulation
@@ -118,6 +124,9 @@ The default server address is `http://localhost:3000`.
 | `DEVICE_COMMAND_RETRY_DELAY_MS` | `1000` | Delay before retrying a command confirmed not to have run. |
 | `DEVICE_COMMAND_MAXIMUM_ATTEMPTS` | `3` | Maximum safe delivery attempts before a command fails. |
 | `DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS` | `5000` | Deadline for a device acknowledgement before reconciliation. |
+| `SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS` | `5000` | Interval between in-process controller heartbeats. |
+| `SIMULATED_CONTROLLER_HEARTBEAT_TIMEOUT_MS` | `15000` | Age after which the backend reports an online controller as `STALE`. |
+| `ENABLE_SIMULATED_CONTROLLER_CONFIGURATION` | development only | Enables protected behaviour, connection, and restart controls. Always disabled when `NODE_ENV=production`. |
 | `LIFECYCLE_COUNTDOWN_MS` | `10000` | Simulated countdown duration before the bell stage. |
 | `LIFECYCLE_BELL_MS` | `3000` | Simulated bell-stage duration. No bell hardware is controlled. |
 | `LIFECYCLE_DISPENSING_MS` | `2000` | Simulated dispensing-stage duration. No feeder hardware is controlled. |
@@ -127,7 +136,43 @@ The default server address is `http://localhost:3000`.
 
 The persistent Event Store introduced in Phase 4 uses the `node:sqlite` module included with Node.js 24, so no additional database package or native addon is required. File-backed databases use foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout.
 
-The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Existing Events, histories, commands, acknowledgements, queues, contribution data, administrator assignments, and audit records are preserved in place. Commands are created only when Events enter or resume `BELL` and `DISPENSING`, or after a separately approved replacement request.
+The schema is upgraded automatically through ordered migrations when the server connects. Migration 2 adds the resource model. Migration 3 adds the Contribution Ledger. Migration 4 adds FeedIntents, the durable Outbox, and FeedIntent history. Migration 5 adds feeder-to-device assignments, durable DeviceCommands, their Outbox, acknowledgements, state history, audit records, and simulated device execution/fence memory. Migration 6 adds administrator identities, role assignments, Barn scopes, immutable operator audits, welfare notes, and durable feeder/device operational state. Migration 7 adds hierarchical emergency stops, dual-approval records and history, uncertain-outcome resolution cases, conservative welfare-safety entries, feeder safety state, and explicitly linked replacement DeviceCommands. Migration 8 adds persistent simulated controller identities, Feeder assignments, controller execution journals, state history, heartbeats, connection state, and deterministic behaviour configuration. Existing Events, histories, commands, acknowledgements, queues, contribution data, administrator assignments, and audit records are preserved in place. Commands are created only when Events enter or resume `BELL` and `DISPENSING`, or after a separately approved replacement request.
+
+## Simulated controller architecture
+
+The Device Command worker depends only on `DeviceTransport`. Phase 7C supplies an
+`InProcessDeviceTransport`, which routes each command to the persistent controller
+assigned to that command's Barn and Feeder. A future MQTT transport can implement
+the same `start`, `deliver`, acknowledgement-receiver, reconciliation, connection,
+heartbeat, and shutdown contract without changing the Event Engine or command
+state machine.
+
+The controller validates its identity, Barn, Feeder, Device, fencing token,
+operational state, and current Phase 7B-2 safety state before acting. It records
+`RECEIVED -> ACCEPTED -> STARTED -> COMPLETED` in its durable journal and emits
+the equivalent Device Acknowledgements through the normal server acknowledgement
+service. Repeated delivery returns the persisted result, repeated acknowledgements
+are deduplicated, and `SimulatedDeviceExecutions` remains the exactly-once physical
+action guard.
+
+If a restart or failure occurs before the action, delivery may safely resume. If
+the journal proves a dispense occurred but cannot prove the final result,
+reconciliation returns `OUTCOME_UNKNOWN`; the existing operator-resolution and
+welfare-blocking workflow remains authoritative and no automatic retry occurs.
+Emergency stops, disabled Feeders or Devices, disabled/offline/stale controllers,
+and unresolved outcome cases all prevent new simulated actions.
+
+Controller administration is available only below `/api/admin/device-controllers`.
+Listing and execution history require existing view permissions. Enable/disable,
+connection, deterministic behaviour, and restart actions require Hardware Operator
+or Administrator authority in the controller's Barn and create operator audit
+records. Behaviour, connection, and restart simulation are disabled in production.
+
+Everything beyond the server remains simulated: there is no broker, network
+transport, device credential, Raspberry Pi process, GPIO, bell, motor, auger, or
+physical acknowledgement. MQTT should later replace only the transport and edge
+runtime while retaining command IDs, fencing, journal semantics, acknowledgements,
+timeouts, safety gates, and operator resolution.
 
 ## Operator safety flow
 

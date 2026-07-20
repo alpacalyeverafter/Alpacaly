@@ -1,8 +1,8 @@
 import { DeviceAcknowledgementService } from "./device-acknowledgement-service.js";
 import { DeviceCommandService } from "./device-command-service.js";
 import { DeviceCommandWorker } from "./device-command-worker.js";
-import { SimulatedDeviceAdapter } from "./simulated-device-adapter.js";
 import { SqliteDeviceCommandStore } from "./sqlite-device-command-store.js";
+import { createDeviceControllerServices } from "../device-controllers/index.js";
 
 export function createDeviceCommandServices({
     eventEngine,
@@ -20,13 +20,16 @@ export function createDeviceCommandServices({
         eventStore,
         ...(idGenerator ? { idGenerator } : {})
     });
-    const simulatedDeviceAdapter = deviceAdapter || new SimulatedDeviceAdapter({
+    const controllerServices = createDeviceControllerServices({
+        eventStore,
         deviceCommandStore,
+        config,
         clock,
-        bellDelayMs: config.lifecycleBellMs,
-        dispensingDelayMs: config.lifecycleDispensingMs,
-        ...(adapterSleep ? { sleep: adapterSleep } : {})
+        transport: deviceAdapter,
+        ...(idGenerator ? { idGenerator } : {}),
+        ...(adapterSleep ? { controllerSleep: adapterSleep } : {})
     });
+    const deviceTransport = controllerServices.deviceTransport;
     let deviceCommandService;
     const acknowledgementService = new DeviceAcknowledgementService({
         deviceCommandStore,
@@ -60,7 +63,7 @@ export function createDeviceCommandServices({
     });
     const worker = new DeviceCommandWorker({
         deviceCommandStore,
-        deviceAdapter: simulatedDeviceAdapter,
+        deviceTransport,
         acknowledgementService,
         logger,
         clock,
@@ -73,6 +76,7 @@ export function createDeviceCommandServices({
         }
     });
     deviceCommandService.setWorker(worker);
+    controllerServices.controllerService.setWorker(worker);
     eventEngine.setDeviceCommandService(deviceCommandService);
 
     if (startWorker) {
@@ -81,7 +85,9 @@ export function createDeviceCommandServices({
 
     return {
         deviceCommandStore,
-        deviceAdapter: simulatedDeviceAdapter,
+        deviceTransport,
+        deviceAdapter: deviceTransport,
+        ...controllerServices,
         acknowledgementService,
         deviceCommandService,
         worker

@@ -39,6 +39,17 @@ function deviceContext(req) {
     };
 }
 
+function controllerContext(store) {
+    return req => {
+        const controller = store.getController(req.params.controllerId);
+        return {
+            barnId: controller?.barnId || req.query.barnId || null,
+            targetType: "SIMULATED_CONTROLLER",
+            targetId: req.params.controllerId || null
+        };
+    };
+}
+
 function authorize(services, permission, resolveContext = barnContext, options = {}) {
     return authorizeAdministrator({
         authorizationService: services.authorizationService,
@@ -94,6 +105,8 @@ export function createAdministratorRouter({
     const store = services.store;
     const operations = services.resourceOperationsService;
     const safety = operatorSafetyServices;
+    const controllers = deviceCommandServices.controllerService;
+    const controllerStore = deviceCommandServices.controllerStore;
 
     router.get("/session", (req, res) => {
         const identity = req.administratorIdentity;
@@ -675,6 +688,149 @@ export function createAdministratorRouter({
                 },
                 requestId: req.requestId
             });
+        }
+    );
+
+    router.get(
+        "/device-controllers",
+        authorize(services, PERMISSIONS.VIEW_DEVICE_CONTROLLERS, req => ({
+            barnId: req.query.barnId || null,
+            targetType: "SIMULATED_CONTROLLER"
+        })),
+        (req, res) => {
+            res.status(200).json({
+                controllers: controllers.list({
+                    barnId: req.query.barnId || null
+                }),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.get(
+        "/device-controllers/:controllerId",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_DEVICE_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    controller: controllers.get(req.params.controllerId),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/device-controllers/:controllerId/executions",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_COMMAND_HISTORY,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    executions: controllers.getRecentExecutions(
+                        req.params.controllerId,
+                        req.query.limit
+                    ),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/device-controllers/:controllerId/status",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SIMULATED_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                const controller = controllers.setEnabled(
+                    req.params.controllerId,
+                    req.body?.enabled === true,
+                    actionContext(req)
+                );
+                res.status(200).json({ controller, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/device-controllers/:controllerId/connection",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SIMULATED_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                const controller = controllers.setConnectionState(
+                    req.params.controllerId,
+                    req.body?.connectionState,
+                    actionContext(req)
+                );
+                res.status(200).json({ controller, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        [
+            "/device-controllers/:controllerId/simulation-behaviour",
+            "/device-controllers/:controllerId/simulation-behavior"
+        ],
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SIMULATED_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                const controller = controllers.configureBehaviour(
+                    req.params.controllerId,
+                    req.body?.behaviour || req.body,
+                    actionContext(req)
+                );
+                res.status(200).json({ controller, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/device-controllers/:controllerId/restart",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SIMULATED_CONTROLLERS,
+            controllerContext(controllerStore)
+        ),
+        (req, res, next) => {
+            try {
+                const controller = controllers.restart(
+                    req.params.controllerId,
+                    actionContext(req)
+                );
+                res.status(200).json({ controller, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
         }
     );
 

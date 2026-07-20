@@ -46,6 +46,8 @@ export function createApp(options = {}) {
             config,
             clock: eventEngine.clock
         });
+    deviceCommandServices.controllerService
+        ?.setAdministratorSecurityServices(administratorSecurityServices);
     const operatorSafetyServices = options.operatorSafetyServices
         || createOperatorSafetyServices({
             eventEngine,

@@ -25,7 +25,8 @@ function wait(milliseconds, signal) {
 export class DeviceCommandWorker {
     constructor({
         deviceCommandStore,
-        deviceAdapter,
+        deviceTransport = null,
+        deviceAdapter = null,
         acknowledgementService,
         logger,
         clock = () => new Date(),
@@ -36,7 +37,11 @@ export class DeviceCommandWorker {
         onOutcomeUnknown = () => {}
     }) {
         this.deviceCommandStore = deviceCommandStore;
-        this.deviceAdapter = deviceAdapter;
+        this.deviceTransport = deviceTransport || deviceAdapter;
+        if (!this.deviceTransport) {
+            throw new Error("DeviceCommandWorker requires a device transport.");
+        }
+        this.deviceAdapter = this.deviceTransport;
         this.acknowledgementService = acknowledgementService;
         this.logger = logger;
         this.clock = clock;
@@ -47,6 +52,7 @@ export class DeviceCommandWorker {
         this.onOutcomeUnknown = onOutcomeUnknown;
         this.safetyService = null;
         this.started = false;
+        this.transportStarted = false;
         this.timer = null;
         this.processingPoll = false;
         this.inFlight = new Map();
@@ -60,12 +66,35 @@ export class DeviceCommandWorker {
         if (this.abortController.signal.aborted) {
             this.abortController = new AbortController();
         }
-        this.deviceAdapter.start();
+        this.startTransport();
         this.started = true;
         this.reconcileOutcomeUnknownCommands();
         void this.reconcileOutstanding({ force: true });
         void this.processReadyCommands();
         this.scheduleNextPoll();
+    }
+
+    startTransport() {
+        if (this.transportStarted) {
+            return;
+        }
+        if (this.abortController.signal.aborted) {
+            this.abortController = new AbortController();
+        }
+        this.deviceTransport.start({
+            onAcknowledgement: acknowledgement => (
+                this.acknowledgementService.record(acknowledgement)
+            ),
+            onTransportError: payload => {
+                this.logger.warn({
+                    event: "device_transport_error",
+                    commandId: payload?.commandId,
+                    controllerId: payload?.controllerId,
+                    error: String(payload?.error?.message || payload?.error || "unknown")
+                }, "Device transport reported an error");
+            }
+        });
+        this.transportStarted = true;
     }
 
     async stop() {
@@ -76,7 +105,8 @@ export class DeviceCommandWorker {
         }
         this.abortController.abort();
         await Promise.allSettled([...this.inFlight.values()]);
-        await this.deviceAdapter.shutdown();
+        await this.deviceTransport.shutdown();
+        this.transportStarted = false;
     }
 
     cancelInFlight() {
@@ -86,9 +116,11 @@ export class DeviceCommandWorker {
 
     setSafetyService(safetyService) {
         this.safetyService = safetyService;
+        this.deviceTransport.setSafetyService?.(safetyService);
     }
 
     processCommand(commandId, { forceReconcile = false } = {}) {
+        this.startTransport();
         const existing = this.inFlight.get(commandId);
         if (existing) {
             return existing;
@@ -148,11 +180,13 @@ export class DeviceCommandWorker {
             details: { delivery: "DEVICE_ADAPTER" }
         });
         try {
-            const acknowledgement = await this.deviceAdapter.deliver(command, {
+            const delivery = await this.deviceTransport.deliver(command, {
                 signal: this.abortController.signal
             });
-            if (acknowledgement) {
-                this.acknowledgementService.record(acknowledgement);
+            // Phase 7A adapters returned an acknowledgement directly. The
+            // Phase 7C transport emits acknowledgements through its receiver.
+            if (delivery?.acknowledgementId && delivery?.commandId) {
+                this.acknowledgementService.record(delivery);
             }
         } catch (error) {
             if (error?.name === "AbortError") {
@@ -184,7 +218,7 @@ export class DeviceCommandWorker {
             return command;
         }
 
-        const reconciliation = await this.deviceAdapter.reconcile(command);
+        const reconciliation = await this.deviceTransport.reconcile(command);
         if (reconciliation.acknowledgement) {
             this.acknowledgementService.record(reconciliation.acknowledgement);
             return this.deviceCommandStore.getCommand(command.commandId);
@@ -205,6 +239,13 @@ export class DeviceCommandWorker {
                 command.commandId,
                 new Error("Command was confirmed not processed by the device.")
             );
+        }
+        if (force && reconciliation.outcome === "UNKNOWN") {
+            return this.markOutcomeUnknown(command.commandId, {
+                timestamp: now.toISOString(),
+                lastError: "Device transport reported an uncertain outcome",
+                details: { reconciliationOutcome: "UNKNOWN", forced: true }
+            });
         }
         if (Number.isFinite(deadline) && deadline <= now.getTime()) {
             if (command.status !== "TIMED_OUT") {

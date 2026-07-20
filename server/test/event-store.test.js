@@ -71,12 +71,16 @@ test("creates the required persistent Event Store tables", t => {
         "Queue",
         "Queues",
         "RoleAssignments",
+        "SimulatedControllerCommandJournal",
+        "SimulatedControllerFeederAssignments",
+        "SimulatedControllerJournalHistory",
+        "SimulatedControllers",
         "SimulatedDeviceExecutions",
         "SimulatedDeviceFences",
         "WelfareNotes",
         "WelfareSafetyLedger"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 7);
+    assert.equal(engine.eventStore.getSchemaVersion(), 8);
 
     engine.close();
 });

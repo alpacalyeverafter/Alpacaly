@@ -60,6 +60,8 @@ async function createHarness({
         administrators: app.locals.administratorSecurityServices,
         safety: app.locals.operatorSafetyServices,
         async close() {
+            await app.locals.deviceCommandServices.worker.stop();
+            app.locals.contributionLedgerServices.outboxWorker.stop();
             if (!eventEngine.eventStore.closed) {
                 await eventEngine.shutdown();
             }
@@ -836,27 +838,31 @@ test("an approved critical action safely resumes on an authenticated retry after
     );
 });
 
-test("migration 7 upgrades the Phase 7B-1 schema without recreating it", t => {
+test("migration 7 remains compatible when the store advances to schema 8", t => {
     const directory = mkdtempSync(join(tmpdir(), "alpacaly-safety-migration-"));
     const databasePath = join(directory, "events.sqlite");
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const logger = createTestLogger();
     const legacy = new DatabaseSync(databasePath);
     legacy.exec("PRAGMA foreign_keys = ON;");
-    EVENT_STORE_MIGRATIONS.slice(0, -1).forEach(migration => {
+    EVENT_STORE_MIGRATIONS.filter(migration => migration.version < 7)
+        .forEach(migration => {
         legacy.exec("BEGIN IMMEDIATE;");
         migration.up(legacy);
         legacy.exec(`PRAGMA user_version = ${migration.version};`);
         legacy.exec("COMMIT;");
-    });
+        });
     legacy.close();
     assert.equal(existsSync(databasePath), true);
     const migrated = new SqliteEventStore({ databasePath, logger });
-    assert.equal(migrated.getSchemaVersion(), 7);
+    assert.equal(migrated.getSchemaVersion(), 8);
     assert.ok(migrated.getTableNames().includes("EmergencyStops"));
     assert.ok(migrated.getTableNames().includes("ApprovalRequests"));
     assert.ok(migrated.getTableNames().includes("OperatorResolutionCases"));
-    assert.equal(EVENT_STORE_MIGRATIONS.at(-1).name, "operator_safety");
+    assert.equal(
+        EVENT_STORE_MIGRATIONS.find(migration => migration.version === 7).name,
+        "operator_safety"
+    );
     migrated.close();
 });
 

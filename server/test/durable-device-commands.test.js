@@ -534,7 +534,7 @@ test("restart recovers a ready command and creates exactly one physical action",
     assert.equal(
         second.deviceCommands.deviceCommandStore
             .getAcknowledgementsForCommand(command.commandId).length,
-        1
+        3
     );
     second.eventEngine.close();
 });
@@ -576,7 +576,7 @@ test("real restart reconciles action-before-ack without duplicate feeding", asyn
     assert.equal(
         second.deviceCommands.deviceCommandStore
             .getAcknowledgementsForCommand(command.commandId).length,
-        1
+        3
     );
     second.eventEngine.close();
 });

@@ -165,6 +165,24 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             "DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS",
             { minimum: 0 }
         ),
+        simulatedControllerHeartbeatIntervalMs: parseInteger(
+            env.SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS,
+            DEFAULTS.simulatedControllerHeartbeatIntervalMs,
+            "SIMULATED_CONTROLLER_HEARTBEAT_INTERVAL_MS",
+            { minimum: 10 }
+        ),
+        simulatedControllerHeartbeatTimeoutMs: parseInteger(
+            env.SIMULATED_CONTROLLER_HEARTBEAT_TIMEOUT_MS,
+            DEFAULTS.simulatedControllerHeartbeatTimeoutMs,
+            "SIMULATED_CONTROLLER_HEARTBEAT_TIMEOUT_MS",
+            { minimum: 10 }
+        ),
+        enableSimulatedControllerConfiguration: nodeEnv !== "production"
+            && parseBoolean(
+                env.ENABLE_SIMULATED_CONTROLLER_CONFIGURATION,
+                DEFAULTS.enableSimulatedControllerConfiguration,
+                "ENABLE_SIMULATED_CONTROLLER_CONFIGURATION"
+            ),
         lifecycleCountdownMs: parseInteger(
             env.LIFECYCLE_COUNTDOWN_MS,
             DEFAULTS.lifecycleCountdownMs,
