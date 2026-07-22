@@ -5,6 +5,7 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const { AlpacalyApiClient, ApiClientError } = require("../../js/api-client.js");
 const { ServerEventEngine } = require("../../js/event-engine.js");
+const { PaymentGateway } = require("../../js/payment-gateway.js");
 
 const browserConfig = Object.freeze({
     DEMO_MAX_FEEDS: 100,
@@ -37,6 +38,42 @@ test("browser API client submits feed requests to the configured backend", async
     assert.equal(capturedRequest.options.method, "POST");
     assert.deepEqual(JSON.parse(capturedRequest.options.body), { supporterName: "Ada" });
     assert.equal(capturedRequest.options.headers.authorization, undefined);
+});
+
+test("browser payment boundary creates and reads server-backed sandbox payments", async () => {
+    const capturedRequests = [];
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        fetchImpl: async (url, options) => {
+            capturedRequests.push({ url, options });
+            return jsonResponse({
+                checkoutUrl: "https://checkout.stripe.test/session/fixture",
+                paymentRequest: { paymentRequestId: "payment-request-1" }
+            });
+        }
+    });
+    const gateway = new PaymentGateway(client);
+
+    await gateway.createCheckoutSession({
+        supporterName: "Ada",
+        clientRequestId: "stripe-test-request-1"
+    });
+    await gateway.getPaymentRequest("payment-request-1");
+
+    assert.equal(
+        capturedRequests[0].url,
+        "http://localhost:3000/api/payments/checkout-sessions"
+    );
+    assert.deepEqual(JSON.parse(capturedRequests[0].options.body), {
+        supporterName: "Ada",
+        clientRequestId: "stripe-test-request-1",
+        amountMinor: 500,
+        currency: "GBP"
+    });
+    assert.equal(
+        capturedRequests[1].url,
+        "http://localhost:3000/api/payments/requests/payment-request-1"
+    );
 });
 
 test("browser API client sends only the configured development identity to admin APIs", async () => {

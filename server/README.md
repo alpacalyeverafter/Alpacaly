@@ -1,5 +1,18 @@
 # Alpacaly Event Engine Server
 
+## Phase 8A sandbox-payment website MVP
+
+The existing website can now create a server-side Stripe Test Mode Checkout
+Session and track the resulting payment through the provider-neutral
+`ProviderEvent -> Contribution -> FeedIntent -> Event Engine` pipeline. The
+payment provider never calls hardware or creates Device Commands. A payment is
+only a feed request and remains subject to all welfare, operational, recovery
+and emergency-stop controls.
+
+See [Phase 8A: Live Website Sandbox-Payment MVP](docs/phase-8a-live-website-mvp.md)
+for local setup, webhook forwarding, test fixtures, security boundaries,
+limitations and the route to a controlled sandbox demonstration.
+
 This directory contains the Phase 7F backend, PostgreSQL recovery and managed-backup operations tooling, and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
 ## Phase 7F implemented boundaries

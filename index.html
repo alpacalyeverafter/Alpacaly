@@ -10,7 +10,7 @@
 
     <title>Alpacaly Ever After</title>
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=phase-8a">
 </head>
 
 <body>
@@ -125,6 +125,11 @@
         <span id="event-id">Event ID: —</span>
     </div>
 
+    <div class="status-card">
+        <strong id="payment-status">Sandbox ready</strong>
+        <span>Payment status</span>
+    </div>
+
 </div>
 
 <div class="demo-controls">
@@ -135,16 +140,18 @@
         placeholder="Supporter name"
     >
 
-    <button id="test-sponsor">
-        Test Sponsorship
+    <button id="test-sponsor" class="button" type="button">
+        Sponsor a £5 Test Feed
     </button>
 
-    <button id="reset-demo" type="button">
+    <button id="reset-demo" class="button button-secondary" type="button">
         Reset Demo
     </button>
 
     <p id="supporter-message">
-        Demo mode. No payment will be taken.
+        Stripe Test Mode only. A payment is a request to join the feeding queue,
+        not a guaranteed dispense. Welfare and operational controls always decide
+        whether and when feeding can occur.
     </p>
 
 </div>

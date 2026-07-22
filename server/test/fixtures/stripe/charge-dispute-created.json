@@ -1,0 +1,18 @@
+{
+  "id": "evt_dispute_fixture",
+  "object": "event",
+  "type": "charge.dispute.created",
+  "created": 1784721600,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "dp_test_fixture",
+      "object": "dispute",
+      "amount": 500,
+      "currency": "gbp",
+      "status": "needs_response",
+      "payment_intent": "pi_test_fixture",
+      "metadata": {}
+    }
+  }
+}

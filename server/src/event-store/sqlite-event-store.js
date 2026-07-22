@@ -47,6 +47,31 @@ function mapContribution(row) {
     } : null;
 }
 
+function mapPaymentRequest(row) {
+    return row ? {
+        paymentRequestId: row.paymentRequestId,
+        provider: row.provider,
+        mode: row.mode,
+        clientRequestId: row.clientRequestId,
+        checkoutSessionId: row.checkoutSessionId,
+        checkoutUrl: row.checkoutUrl,
+        paymentIntentId: row.paymentIntentId,
+        supporterDisplayName: row.supporterDisplayName,
+        amountMinor: Number(row.amountMinor),
+        currency: row.currency,
+        status: row.status,
+        providerStatus: row.providerStatus,
+        failureCode: row.failureCode,
+        lastProviderEventId: row.lastProviderEventId,
+        contributionId: row.contributionId,
+        feedIntentId: row.feedIntentId,
+        eventId: row.eventId,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        completedAt: row.completedAt
+    } : null;
+}
+
 function mapFeedIntent(row) {
     return row ? {
         feedIntentId: row.feedIntentId,
@@ -302,6 +327,69 @@ export class SqliteEventStore {
                   AND contribution.feedQuantity > 0
                   AND providerEvent.verificationStatus = 'VERIFIED'
                 ORDER BY contribution.createdAt ASC, contribution.contributionId ASC
+            `),
+            insertPaymentRequest: this.database.prepare(`
+                INSERT INTO PaymentRequests (
+                    paymentRequestId,
+                    provider,
+                    mode,
+                    clientRequestId,
+                    checkoutSessionId,
+                    checkoutUrl,
+                    paymentIntentId,
+                    supporterDisplayName,
+                    amountMinor,
+                    currency,
+                    status,
+                    providerStatus,
+                    failureCode,
+                    lastProviderEventId,
+                    contributionId,
+                    feedIntentId,
+                    eventId,
+                    createdAt,
+                    updatedAt,
+                    completedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `),
+            selectPaymentRequestById: this.database.prepare(`
+                SELECT * FROM PaymentRequests WHERE paymentRequestId = ?
+            `),
+            selectPaymentRequestByClientRequest: this.database.prepare(`
+                SELECT * FROM PaymentRequests
+                WHERE provider = ? AND clientRequestId = ?
+            `),
+            selectPaymentRequestByCheckoutSession: this.database.prepare(`
+                SELECT * FROM PaymentRequests
+                WHERE provider = ? AND checkoutSessionId = ?
+            `),
+            selectPaymentRequestByPaymentIntent: this.database.prepare(`
+                SELECT * FROM PaymentRequests
+                WHERE provider = ? AND paymentIntentId = ?
+            `),
+            selectPaymentRequests: this.database.prepare(`
+                SELECT * FROM PaymentRequests
+                ORDER BY createdAt DESC, paymentRequestId DESC
+                LIMIT ?
+            `),
+            attachPaymentCheckoutSession: this.database.prepare(`
+                UPDATE PaymentRequests
+                SET checkoutSessionId = ?, checkoutUrl = ?, providerStatus = ?, updatedAt = ?
+                WHERE paymentRequestId = ? AND status = 'PENDING'
+            `),
+            updatePaymentRequestState: this.database.prepare(`
+                UPDATE PaymentRequests
+                SET status = ?,
+                    providerStatus = ?,
+                    failureCode = ?,
+                    paymentIntentId = COALESCE(?, paymentIntentId),
+                    lastProviderEventId = COALESCE(?, lastProviderEventId),
+                    contributionId = COALESCE(?, contributionId),
+                    feedIntentId = COALESCE(?, feedIntentId),
+                    eventId = COALESCE(?, eventId),
+                    completedAt = COALESCE(?, completedAt),
+                    updatedAt = ?
+                WHERE paymentRequestId = ?
             `),
             insertFeedIntent: this.database.prepare(`
                 INSERT INTO FeedIntents (
@@ -835,6 +923,126 @@ export class SqliteEventStore {
         this.assertOpen();
         return this.statements.selectContributionsWithoutFeedIntent.all()
             .map(mapContribution);
+    }
+
+    createPaymentRequest(paymentRequest) {
+        this.assertOpen();
+        this.statements.insertPaymentRequest.run(
+            paymentRequest.paymentRequestId,
+            paymentRequest.provider,
+            paymentRequest.mode,
+            paymentRequest.clientRequestId,
+            paymentRequest.checkoutSessionId,
+            paymentRequest.checkoutUrl,
+            paymentRequest.paymentIntentId,
+            paymentRequest.supporterDisplayName,
+            paymentRequest.amountMinor,
+            paymentRequest.currency,
+            paymentRequest.status,
+            paymentRequest.providerStatus,
+            paymentRequest.failureCode,
+            paymentRequest.lastProviderEventId,
+            paymentRequest.contributionId,
+            paymentRequest.feedIntentId,
+            paymentRequest.eventId,
+            paymentRequest.createdAt,
+            paymentRequest.updatedAt,
+            paymentRequest.completedAt
+        );
+        return { ...paymentRequest };
+    }
+
+    getPaymentRequest(paymentRequestId) {
+        this.assertOpen();
+        return mapPaymentRequest(
+            this.statements.selectPaymentRequestById.get(paymentRequestId)
+        );
+    }
+
+    getPaymentRequestByClientRequest(provider, clientRequestId) {
+        this.assertOpen();
+        return mapPaymentRequest(
+            this.statements.selectPaymentRequestByClientRequest.get(
+                provider,
+                clientRequestId
+            )
+        );
+    }
+
+    getPaymentRequestByCheckoutSession(provider, checkoutSessionId) {
+        this.assertOpen();
+        return mapPaymentRequest(
+            this.statements.selectPaymentRequestByCheckoutSession.get(
+                provider,
+                checkoutSessionId
+            )
+        );
+    }
+
+    getPaymentRequestByPaymentIntent(provider, paymentIntentId) {
+        this.assertOpen();
+        return mapPaymentRequest(
+            this.statements.selectPaymentRequestByPaymentIntent.get(
+                provider,
+                paymentIntentId
+            )
+        );
+    }
+
+    listPaymentRequests({ limit = 100 } = {}) {
+        this.assertOpen();
+        const normalizedLimit = Math.min(500, Math.max(1, Number(limit) || 100));
+        return this.statements.selectPaymentRequests.all(normalizedLimit)
+            .map(mapPaymentRequest);
+    }
+
+    attachPaymentCheckoutSession(paymentRequestId, {
+        checkoutSessionId,
+        checkoutUrl,
+        providerStatus,
+        updatedAt
+    }) {
+        this.assertOpen();
+        this.statements.attachPaymentCheckoutSession.run(
+            checkoutSessionId,
+            checkoutUrl,
+            providerStatus,
+            updatedAt,
+            paymentRequestId
+        );
+        return this.getPaymentRequest(paymentRequestId);
+    }
+
+    updatePaymentRequestState(paymentRequestId, {
+        status,
+        providerStatus,
+        failureCode = null,
+        paymentIntentId = null,
+        providerEventId = null,
+        contributionId = null,
+        feedIntentId = null,
+        eventId = null,
+        completedAt = null,
+        updatedAt
+    }) {
+        this.assertOpen();
+        const result = this.statements.updatePaymentRequestState.run(
+            status,
+            providerStatus,
+            failureCode,
+            paymentIntentId,
+            providerEventId,
+            contributionId,
+            feedIntentId,
+            eventId,
+            completedAt,
+            updatedAt,
+            paymentRequestId
+        );
+        if (Number(result.changes) !== 1) {
+            throw new Error(`PaymentRequest ${paymentRequestId} was not found.`);
+        }
+        return this.getPaymentRequest(paymentRequestId);
     }
 
     getFeedIntent(feedIntentId) {
@@ -1450,6 +1658,7 @@ export class SqliteEventStore {
                 DELETE FROM ApprovalRequests;
                 DELETE FROM EmergencyStops;
                 DELETE FROM MqttSafetyStates;
+                DELETE FROM PaymentRequests;
                 DELETE FROM AuditRecords;
                 DELETE FROM Events;
                 DELETE FROM FeedIntentHistory;

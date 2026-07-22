@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 const COUNT_TABLES = Object.freeze([
     "ProviderEvents",
+    "PaymentRequests",
     "Contributions",
     "FeedIntents",
     "Outbox",
@@ -27,6 +28,7 @@ const COUNT_TABLES = Object.freeze([
 
 const UNIQUE_IDENTITIES = Object.freeze([
     ["ProviderEvents", "providerEventId"],
+    ["PaymentRequests", "paymentRequestId"],
     ["Contributions", "contributionId"],
     ["FeedIntents", "feedIntentId"],
     ["Events", "eventId"],
@@ -124,6 +126,25 @@ export class RestoredDataReconciler {
         );
 
         const relationships = {
+            paymentContributionOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM PaymentRequests payment
+                LEFT JOIN Contributions contribution
+                  ON contribution.contributionId = payment.contributionId
+                WHERE payment.contributionId IS NOT NULL
+                  AND contribution.contributionId IS NULL
+            `),
+            paymentFeedIntentOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM PaymentRequests payment
+                LEFT JOIN FeedIntents intent
+                  ON intent.feedIntentId = payment.feedIntentId
+                WHERE payment.feedIntentId IS NOT NULL
+                  AND intent.feedIntentId IS NULL
+            `),
+            paymentEventOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM PaymentRequests payment
+                LEFT JOIN Events event ON event.eventId = payment.eventId
+                WHERE payment.eventId IS NOT NULL AND event.eventId IS NULL
+            `),
             providerEventContributionOrphans: count(this.database, `
                 SELECT COUNT(*) AS count FROM Contributions contribution
                 LEFT JOIN ProviderEvents provider

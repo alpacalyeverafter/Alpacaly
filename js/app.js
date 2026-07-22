@@ -14,6 +14,7 @@
     const estimatedWaitDisplay = document.getElementById("estimated-wait");
     const systemStatus = document.getElementById("system-status");
     const eventIdDisplay = document.getElementById("event-id");
+    const paymentStatusDisplay = document.getElementById("payment-status");
     const supporterName = document.getElementById("supporter-name");
     const sponsorButton = document.getElementById("test-sponsor");
     const resetDemoButton = document.getElementById("reset-demo");
@@ -25,6 +26,7 @@
         estimatedWaitDisplay,
         systemStatus,
         eventIdDisplay,
+        paymentStatusDisplay,
         supporterName,
         sponsorButton,
         resetDemoButton,
@@ -49,6 +51,8 @@
     let previousBackendAvailable = null;
     let isSubmitting = false;
     let confirmationTimeoutId = null;
+    let trackedPaymentRequest = null;
+    let paymentPollTimerId = null;
 
     function formatDuration(milliseconds) {
         const totalSeconds = Math.max(0, Math.ceil(Number(milliseconds || 0) / 1000));
@@ -65,7 +69,7 @@
         sponsorButton.disabled = isSubmitting
             || state.feedsRemaining <= 0
             || state.backendAvailable === false;
-        sponsorButton.textContent = "Test Sponsorship";
+        sponsorButton.textContent = "Sponsor a £5 Test Feed";
     }
 
     function clearSupporterConfirmation() {
@@ -86,10 +90,39 @@
         }, 5000);
     }
 
-    function showSupporterConfirmation(name, event) {
+    function showSupporterConfirmation(paymentRequest) {
+        const event = paymentRequest.event;
         showTemporaryMessage(
-            `Thank you, ${name}. Event ${event.eventId} is in queue position ${event.queuePosition}.`
+            event
+                ? `Sandbox payment confirmed. Event ${event.eventId} is in queue position ${event.queuePosition ?? "—"}.`
+                : paymentRequest.feeding?.message
+                    || "Sandbox payment status updated."
         );
+    }
+
+    function renderPaymentRequest(paymentRequest) {
+        trackedPaymentRequest = paymentRequest;
+        paymentStatusDisplay.textContent = formatState(paymentRequest.status);
+        const event = paymentRequest.event;
+        if (event) {
+            queuePositionDisplay.textContent = event.queuePosition === null
+                ? formatState(event.state)
+                : String(event.queuePosition);
+            estimatedWaitDisplay.textContent = event.queuePosition === null
+                ? `Estimated wait: ${formatState(event.state)}`
+                : `Estimated wait: ${formatDuration(event.estimatedWaitMs)}`;
+            eventIdDisplay.textContent = `Event ID: ${event.eventId}`;
+            systemStatus.textContent = formatState(event.state);
+        } else {
+            queuePositionDisplay.textContent = "—";
+            estimatedWaitDisplay.textContent = "Estimated wait: —";
+            eventIdDisplay.textContent = paymentRequest.status === "COMPLETED"
+                ? "Event ID: pending Event Engine acceptance"
+                : "Event ID: —";
+            systemStatus.textContent = formatState(
+                paymentRequest.feeding?.status || paymentRequest.status
+            );
+        }
     }
 
     function renderTrackedEvent(trackedEvent, fallbackStatus) {
@@ -120,7 +153,12 @@
 
     function renderState(state) {
         feedsDisplay.textContent = state.feedsRemaining ?? CONFIG.DEMO_MAX_FEEDS;
-        renderTrackedEvent(state.trackedEvent, state.status);
+        if (trackedPaymentRequest) {
+            renderPaymentRequest(trackedPaymentRequest);
+        } else {
+            paymentStatusDisplay.textContent = "Sandbox ready";
+            renderTrackedEvent(state.trackedEvent, state.status);
+        }
 
         const trackedStatus = state.trackedEvent
             ? state.trackedEvent.state || state.trackedEvent.status
@@ -167,43 +205,74 @@
 
         isSubmitting = true;
         sponsorButton.disabled = true;
-        sponsorButton.textContent = "Submitting...";
+        sponsorButton.textContent = "Opening test checkout...";
 
-        const event = eventEngine.createDonationEvent({
-            supporterName: name,
-            source: "website-demo",
-            amount: 0,
-            message: "Version 1 test sponsorship"
-        });
-
-        const result = await eventEngine.submitEvent(event);
-
-        if (!result.accepted) {
-            isSubmitting = false;
-            sponsorButton.disabled = false;
-            sponsorButton.textContent = "Test Sponsorship";
-            supporterMessage.textContent = result.message || "The feed event was not accepted.";
-            supporterName.focus();
-            return;
-        }
-
-        const paymentResult = await paymentGateway.processPayment({
-            supporterName: name,
-            amount: 5,
-            eventId: result.event.id
-        });
-
-        if (!paymentResult || !paymentResult.success) {
-            supporterMessage.textContent = paymentResult && paymentResult.error
-                ? paymentResult.error
-                : "The payment could not be completed.";
+        try {
+            const result = await paymentGateway.createCheckoutSession({
+                supporterName: name,
+                clientRequestId: eventEngine.generateClientRequestId("stripe-test")
+            });
+            if (!result?.checkoutUrl) {
+                throw new Error("The sandbox checkout URL was not returned.");
+            }
+            supporterName.value = "";
+            trackedPaymentRequest = result.paymentRequest;
+            renderPaymentRequest(result.paymentRequest);
+            supporterMessage.textContent =
+                "Opening Stripe Test Mode. No live payment details should be used.";
             releaseSubmission();
+            window.location.assign(result.checkoutUrl);
+        } catch (error) {
+            supporterMessage.textContent = error.message
+                || "The sandbox checkout could not be opened.";
+            releaseSubmission();
+        }
+    }
+
+    async function refreshTrackedPayment() {
+        if (!trackedPaymentRequest?.paymentRequestId) {
             return;
         }
+        try {
+            const response = await paymentGateway.getPaymentRequest(
+                trackedPaymentRequest.paymentRequestId
+            );
+            const priorStatus = trackedPaymentRequest.status;
+            renderPaymentRequest(response.paymentRequest);
+            if (response.paymentRequest.status !== priorStatus) {
+                showSupporterConfirmation(response.paymentRequest);
+            } else if (response.paymentRequest.feeding?.message) {
+                supporterMessage.textContent = response.paymentRequest.feeding.message;
+            }
+        } catch (error) {
+            supporterMessage.textContent = error.message
+                || "Payment status is temporarily unavailable.";
+        }
+    }
 
-        supporterName.value = "";
-        showSupporterConfirmation(name, result.event);
-        releaseSubmission();
+    function startPaymentTracking() {
+        const parameters = new URLSearchParams(window.location.search);
+        const paymentRequestId = parameters.get("payment_request_id");
+        if (!paymentRequestId) {
+            return;
+        }
+        trackedPaymentRequest = {
+            paymentRequestId,
+            status: "PENDING",
+            event: null,
+            feeding: { status: "PAYMENT_PENDING" }
+        };
+        if (parameters.get("checkout") === "cancelled") {
+            supporterMessage.textContent =
+                "Test checkout was cancelled. No feed request is created unless payment is verified.";
+        } else {
+            supporterMessage.textContent = "Checking the verified sandbox payment status...";
+        }
+        void refreshTrackedPayment();
+        paymentPollTimerId = window.setInterval(
+            () => void refreshTrackedPayment(),
+            2000
+        );
     }
 
     async function resetDemo() {
@@ -217,6 +286,11 @@
 
         const result = await eventEngine.resetDemo();
         if (result.success) {
+            trackedPaymentRequest = null;
+            if (paymentPollTimerId) {
+                window.clearInterval(paymentPollTimerId);
+                paymentPollTimerId = null;
+            }
             supporterMessage.textContent = "Demo queue reset. Ready for the next supporter.";
         } else {
             supporterMessage.textContent = result.message
@@ -231,5 +305,6 @@
     sponsorButton.addEventListener("click", submitDemoFeed);
     resetDemoButton.addEventListener("click", resetDemo);
     eventEngine.subscribe(renderState);
+    startPaymentTracking();
 
 })();

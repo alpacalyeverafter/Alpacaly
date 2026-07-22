@@ -75,6 +75,23 @@ function optionalString(value) {
     return normalized || null;
 }
 
+function parseHttpUrl(value, fallback, name) {
+    const candidate = String(value || fallback).trim();
+    let parsed;
+    try {
+        parsed = new URL(candidate);
+    } catch {
+        throw new Error(`${name} must be a valid HTTP or HTTPS URL.`);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error(`${name} must use http:// or https://.`);
+    }
+    if (parsed.username || parsed.password || parsed.hash) {
+        throw new Error(`${name} must not contain credentials or a fragment.`);
+    }
+    return parsed.toString().replace(/\/$/, "");
+}
+
 function optionalAbsolutePath(value, name) {
     const normalized = optionalString(value);
     if (!normalized) {
@@ -143,6 +160,23 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     const corsOrigin = String(env.CORS_ORIGIN || DEFAULTS.corsOrigin).trim();
     if (!corsOrigin) {
         throw new Error("CORS_ORIGIN must not be empty.");
+    }
+    const stripeTestSecretKey = optionalString(env.STRIPE_TEST_SECRET_KEY);
+    const stripeTestWebhookSecret = optionalString(env.STRIPE_TEST_WEBHOOK_SECRET);
+    if (stripeTestSecretKey && !stripeTestSecretKey.startsWith("sk_test_")) {
+        throw new Error("STRIPE_TEST_SECRET_KEY must be a Stripe test-mode key.");
+    }
+    if (
+        stripeTestWebhookSecret
+        && !stripeTestWebhookSecret.startsWith("whsec_")
+    ) {
+        throw new Error("STRIPE_TEST_WEBHOOK_SECRET must be a Stripe webhook secret.");
+    }
+    const paymentDonationCurrency = String(
+        env.PAYMENT_DONATION_CURRENCY || DEFAULTS.paymentDonationCurrency
+    ).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(paymentDonationCurrency)) {
+        throw new Error("PAYMENT_DONATION_CURRENCY must be a three-letter code.");
     }
 
     const centralDatabaseType = parseChoice(
@@ -344,6 +378,41 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
         ),
         requestBodyLimit,
         corsOrigin,
+        paymentSandboxEnabled: nodeEnv !== "production"
+            && parseBoolean(
+                env.ENABLE_PAYMENT_SANDBOX,
+                DEFAULTS.paymentSandboxEnabled,
+                "ENABLE_PAYMENT_SANDBOX"
+            ),
+        paymentDonationAmountMinor: parseInteger(
+            env.PAYMENT_DONATION_AMOUNT_MINOR,
+            DEFAULTS.paymentDonationAmountMinor,
+            "PAYMENT_DONATION_AMOUNT_MINOR",
+            { minimum: 1, maximum: 1_000_000 }
+        ),
+        paymentDonationCurrency,
+        paymentPublicBaseUrl: parseHttpUrl(
+            env.PAYMENT_PUBLIC_BASE_URL,
+            DEFAULTS.paymentPublicBaseUrl,
+            "PAYMENT_PUBLIC_BASE_URL"
+        ),
+        paymentProviderTimeoutMs: parseInteger(
+            env.PAYMENT_PROVIDER_TIMEOUT_MS,
+            DEFAULTS.paymentProviderTimeoutMs,
+            "PAYMENT_PROVIDER_TIMEOUT_MS",
+            { minimum: 100, maximum: 120_000 }
+        ),
+        paymentWebhookToleranceSeconds: parseInteger(
+            env.PAYMENT_WEBHOOK_TOLERANCE_SECONDS,
+            DEFAULTS.paymentWebhookToleranceSeconds,
+            "PAYMENT_WEBHOOK_TOLERANCE_SECONDS",
+            { minimum: 1, maximum: 900 }
+        ),
+        paymentWebhookBodyLimit: String(
+            env.PAYMENT_WEBHOOK_BODY_LIMIT || DEFAULTS.paymentWebhookBodyLimit
+        ).trim(),
+        stripeTestSecretKey,
+        stripeTestWebhookSecret,
         centralDatabaseType,
         databasePath: parseDatabasePath(env.DATABASE_PATH),
         postgresUrl,

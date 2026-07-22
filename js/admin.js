@@ -8,7 +8,6 @@
 
     const eventEngine = window.alpacalyEventEngine;
     const apiClient = window.alpacalyApiClient;
-    const PAYMENT_STORAGE_KEY = "alpacaly-payment-gateway";
     const stateElements = {
         totalFeedsToday: document.getElementById("total-feeds-today"),
         feedsRemaining: document.getElementById("feeds-remaining"),
@@ -18,6 +17,7 @@
         serverStatus: document.getElementById("server-status")
     };
     const historyList = document.getElementById("feed-history-list");
+    const paymentActivityList = document.getElementById("payment-activity-list");
     const feedingNowElement = document.getElementById("feeding-now");
     const waitingQueueList = document.getElementById("waiting-queue-list");
     const emergencyStopList = document.getElementById("emergency-stop-list");
@@ -38,6 +38,7 @@
     let queueRefreshPending = false;
     let activeEventId = null;
     let administratorAuthenticated = false;
+    let paymentRefreshInFlight = false;
 
     function formatCurrency(value) {
         return `£${Number(value || 0).toFixed(2)}`;
@@ -290,48 +291,82 @@
         }
     }
 
-    function readSimulatedPayments() {
-        if (!window.localStorage) {
-            return [];
+    function renderPaymentActivity(payments, unavailableMessage = null) {
+        paymentActivityList.replaceChildren();
+        if (unavailableMessage) {
+            paymentActivityList.append(createStatusItem(
+                "Sandbox payments unavailable",
+                unavailableMessage
+            ));
+            return;
         }
-
-        try {
-            const storedPayments = window.localStorage.getItem(PAYMENT_STORAGE_KEY);
-            if (!storedPayments) {
-                return [];
-            }
-
-            const parsed = JSON.parse(storedPayments);
-            if (parsed && typeof parsed === "object" && Array.isArray(parsed.payments)) {
-                return parsed.payments;
-            }
-
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (error) {
-            console.warn("[Admin] Unable to read simulated payments.", error);
-            return [];
+        if (payments.length === 0) {
+            paymentActivityList.append(createStatusItem(
+                "No sandbox payments yet",
+                "Stripe Test Mode activity will appear here."
+            ));
+            return;
         }
+        payments.forEach(payment => {
+            const links = [
+                `Payment ${payment.paymentRequestId}`,
+                payment.contribution?.contributionId
+                    ? `Contribution ${payment.contribution.contributionId}`
+                    : "No Contribution",
+                payment.feedIntent?.feedIntentId
+                    ? `FeedIntent ${payment.feedIntent.feedIntentId} (${payment.feedIntent.status})`
+                    : "No FeedIntent",
+                payment.event?.eventId
+                    ? `Event ${payment.event.eventId} (${payment.event.state})`
+                    : "No Event",
+                payment.failureCode ? `Failure ${payment.failureCode}` : null
+            ].filter(Boolean).join(" • ");
+            const item = createStatusItem(
+                `${payment.supporterDisplayName || "Anonymous supporter"} • ${formatCurrency(
+                    Number(payment.amountMinor || 0) / 100
+                )} • ${payment.status}`,
+                links
+            );
+            item.style.marginBottom = "12px";
+            paymentActivityList.append(item);
+        });
     }
 
-    function renderPayments() {
-        const payments = readSimulatedPayments();
+    async function renderPayments() {
+        if (!administratorAuthenticated || paymentRefreshInFlight) {
+            return;
+        }
+        paymentRefreshInFlight = true;
+        let payments;
+        try {
+            const response = await apiClient.listAdministratorPayments(100);
+            payments = response.paymentRequests || [];
+        } catch (error) {
+            renderPaymentActivity([], error.message || "Please try again shortly.");
+            paymentRefreshInFlight = false;
+            return;
+        }
+        paymentRefreshInFlight = false;
         const today = new Date().toLocaleDateString("en-CA");
         const todaysPayments = payments.filter(payment => {
-            if (!payment || payment.status !== "SUCCEEDED") {
+            if (!payment || !payment.completedAt) {
                 return false;
             }
 
-            const paymentDate = new Date(payment.createdAt || payment.timestamp || Date.now());
+            const paymentDate = new Date(payment.completedAt);
             return !Number.isNaN(paymentDate.getTime())
                 && paymentDate.toLocaleDateString("en-CA") === today;
         });
         const revenue = todaysPayments.reduce(
-            (total, payment) => total + Number(payment.amount || 0),
+            (total, payment) => payment.status === "COMPLETED"
+                ? total + (Number(payment.amountMinor || 0) / 100)
+                : total,
             0
         );
 
         stateElements.totalPayments.textContent = String(todaysPayments.length);
         stateElements.revenueToday.textContent = formatCurrency(revenue);
+        renderPaymentActivity(payments);
     }
 
     function renderFeedingNow(state) {
@@ -504,6 +539,7 @@
             administratorAuthenticated = true;
             eventEngine.subscribe(renderState);
             renderState(eventEngine.getState());
+            await renderPayments();
         } catch (error) {
             administratorAuthenticated = false;
             stateElements.serverStatus.textContent = "Authentication required";
@@ -515,7 +551,7 @@
         }
     }
 
-    renderPayments();
+    renderPaymentActivity([]);
     renderHistory([]);
     renderEmergencyStops([]);
     renderApprovalRequests([]);
@@ -541,6 +577,6 @@
             "Emergency stop activated."
         );
     });
-    window.setInterval(renderPayments, 1000);
+    window.setInterval(() => void renderPayments(), 5000);
     void initializeAdministrator();
 })();

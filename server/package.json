@@ -13,6 +13,7 @@
     "edge:start": "node src/edge-controller/process.js",
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
+    "test:payments": "node --test --test-concurrency=1 test/sandbox-payments.test.js test/browser-integration.test.js",
     "test:postgres": "node --test --test-concurrency=1 test/postgres-integration.test.js",
     "test:postgres:restore": "node --test --test-concurrency=1 test/postgres-backup-restore.test.js",
     "backup:postgres": "node scripts/postgres-backup.js",
@@ -34,7 +35,8 @@
     "express": "^5.1.0",
     "mqtt": "^5.14.1",
     "pg": "^8.22.0",
-    "pino": "^9.7.0"
+    "pino": "^9.7.0",
+    "stripe": "^22.3.2"
   },
   "devDependencies": {
     "aedes": "^0.51.3",

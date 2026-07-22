@@ -1,113 +1,41 @@
 // ==========================================
 // Alpacaly Ever After
-// Payment Gateway
+// Server-backed sandbox payment boundary
 // ==========================================
 
-class PaymentGateway {
-    constructor(config = {}) {
-        this.config = config || {};
-        this.config.paymentSimulationMode = this.config.paymentSimulationMode !== undefined
-            ? this.config.paymentSimulationMode
-            : true;
-        this.payments = this.loadPayments();
-    }
+(function exposePaymentGateway(global) {
+    "use strict";
 
-    loadPayments() {
-        if (typeof window === "undefined" || !window.localStorage) {
-            return [];
-        }
-
-        try {
-            const raw = window.localStorage.getItem("alpacaly-payment-gateway");
-            if (!raw) {
-                return [];
+    class PaymentGateway {
+        constructor(apiClient) {
+            if (!apiClient) {
+                throw new Error("PaymentGateway requires the server API client.");
             }
+            this.apiClient = apiClient;
+        }
 
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object" && Array.isArray(parsed.payments)) {
-                return parsed.payments;
-            }
+        createCheckoutSession({ supporterName, clientRequestId }) {
+            return this.apiClient.createSandboxCheckoutSession({
+                supporterName,
+                clientRequestId,
+                amountMinor: 500,
+                currency: "GBP"
+            });
+        }
 
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (error) {
-            console.warn("[PaymentGateway] Unable to read payments from localStorage.", error);
-            return [];
+        getPaymentRequest(paymentRequestId) {
+            return this.apiClient.getPaymentRequest(paymentRequestId);
         }
     }
 
-    persistPayments() {
-        if (typeof window === "undefined" || !window.localStorage) {
-            return;
-        }
-
-        try {
-            window.localStorage.setItem("alpacaly-payment-gateway", JSON.stringify({
-                payments: this.payments
-            }));
-        } catch (error) {
-            console.warn("[PaymentGateway] Unable to persist payments to localStorage.", error);
-        }
+    if (typeof module !== "undefined" && module.exports) {
+        module.exports = { PaymentGateway };
     }
 
-    delay(milliseconds) {
-        return new Promise(resolve => setTimeout(resolve, milliseconds));
-    }
-
-    cleanSupporterName(name) {
-        const cleaned = String(name || "").trim();
-        return cleaned || "Anonymous supporter";
-    }
-
-    generatePaymentId() {
-        const randomPart = Math.random().toString(36).slice(2, 10);
-        return `pay-${Date.now()}-${randomPart}`;
-    }
-
-    async processPayment({ supporterName = "", amount = 0, eventId = null } = {}) {
-        const normalizedAmount = Number(amount);
-
-        if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-            return {
-                success: false,
-                paymentId: null,
-                supporterName: this.cleanSupporterName(supporterName),
-                amount: normalizedAmount,
-                timestamp: new Date().toISOString(),
-                error: "Amount must be greater than zero."
-            };
+    if (global) {
+        global.PaymentGateway = PaymentGateway;
+        if (global.document && global.alpacalyApiClient) {
+            global.paymentGateway = new PaymentGateway(global.alpacalyApiClient);
         }
-
-        const paymentId = this.generatePaymentId();
-
-        if (this.config.paymentSimulationMode) {
-            await this.delay(2000);
-        }
-
-        const paymentResult = {
-            paymentId,
-            eventId: eventId || null,
-            supporterName: this.cleanSupporterName(supporterName),
-            amount: normalizedAmount,
-            currency: "GBP",
-            status: "SUCCEEDED",
-            createdAt: new Date().toISOString()
-        };
-
-        const existingPayment = this.payments.find(entry => entry.paymentId === paymentId);
-        if (!existingPayment) {
-            this.payments.push(paymentResult);
-            this.persistPayments();
-        }
-
-        return {
-            success: true,
-            ...paymentResult
-        };
     }
-}
-
-const paymentGateway = new PaymentGateway(CONFIG);
-
-if (typeof window !== "undefined") {
-    window.paymentGateway = paymentGateway;
-}
+})(typeof window !== "undefined" ? window : globalThis);

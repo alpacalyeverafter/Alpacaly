@@ -12,11 +12,16 @@ import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.
 import { requestLogger } from "./middleware/request-logger.js";
 import { authenticateAdministrator } from "./middleware/administrator-security.js";
 import { createOperatorSafetyServices } from "./operator-safety/index.js";
+import { createPaymentServices } from "./payments/index.js";
 import { createAdministratorRouter } from "./routes/administrator.js";
 import { createEventEngineRouter } from "./routes/event-engine.js";
 import { createDevelopmentContributionsRouter } from "./routes/development-contributions.js";
 import { createFeedRequestsRouter } from "./routes/feed-requests.js";
 import { createHealthRouter } from "./routes/health.js";
+import {
+    createPaymentsRouter,
+    createStripeWebhookRouter
+} from "./routes/payments.js";
 import { createResourceQueuesRouter } from "./routes/resource-queues.js";
 
 export function createApp(options = {}) {
@@ -41,6 +46,18 @@ export function createApp(options = {}) {
             outboxPollIntervalMs: config.outboxPollIntervalMs,
             outboxRetryDelayMs: config.outboxRetryDelayMs
         });
+    const paymentServices = options.paymentServices || createPaymentServices({
+        eventEngine,
+        contributionLedgerServices,
+        config,
+        logger,
+        clock: eventEngine.clock,
+        adapter: options.paymentProviderAdapter || null,
+        checkoutSessionCreator: options.checkoutSessionCreator || null,
+        ...(options.paymentIdGenerator
+            ? { idGenerator: options.paymentIdGenerator }
+            : {})
+    });
     const administratorSecurityServices = options.administratorSecurityServices
         || createAdministratorSecurityServices({
             eventEngine,
@@ -78,6 +95,7 @@ export function createApp(options = {}) {
     app.locals.eventEngine = eventEngine;
     app.locals.deviceCommandServices = deviceCommandServices;
     app.locals.contributionLedgerServices = contributionLedgerServices;
+    app.locals.paymentServices = paymentServices;
     app.locals.administratorSecurityServices = administratorSecurityServices;
     app.locals.operatorSafetyServices = operatorSafetyServices;
     app.locals.recoverySafetyService = eventEngine.recoverySafetyService;
@@ -90,6 +108,16 @@ export function createApp(options = {}) {
         exposedHeaders: ["x-request-id"]
     }));
     app.use(requestLogger(logger));
+    app.use(
+        "/api/payments/webhooks/stripe",
+        express.raw({
+            type: "application/json",
+            limit: config.paymentWebhookBodyLimit
+        }),
+        createStripeWebhookRouter({
+            paymentService: paymentServices.paymentService
+        })
+    );
     app.use(express.json({ limit: config.requestBodyLimit }));
 
     app.use("/health", createHealthRouter({
@@ -120,6 +148,9 @@ export function createApp(options = {}) {
         developmentWebsiteContributionService:
             contributionLedgerServices.developmentWebsiteContributionService
     }));
+    app.use("/api/payments", createPaymentsRouter({
+        paymentService: paymentServices.paymentService
+    }));
     app.use("/api/admin", authenticateAdministrator(
         administratorSecurityServices.authenticationService
     ));
@@ -129,6 +160,7 @@ export function createApp(options = {}) {
         administratorSecurityServices,
         deviceCommandServices,
         contributionLedgerServices,
+        paymentServices,
         operatorSafetyServices,
         recoveryDiagnosticsService
     }));

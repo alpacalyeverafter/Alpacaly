@@ -61,6 +61,19 @@
             });
         }
 
+        createSandboxCheckoutSession(paymentRequest) {
+            return this.request("/api/payments/checkout-sessions", {
+                method: "POST",
+                body: paymentRequest
+            });
+        }
+
+        getPaymentRequest(paymentRequestId) {
+            return this.request(
+                `/api/payments/requests/${encodeURIComponent(paymentRequestId)}`
+            );
+        }
+
         getFeedRequest(feedRequestId) {
             return this.request(`/api/feed-requests/${encodeURIComponent(feedRequestId)}`);
         }
@@ -87,6 +100,13 @@
             return this.request(
                 `/api/admin/barns/${encodeURIComponent(barnId)}`
                 + `/feeders/${encodeURIComponent(feederId)}/feed-requests`,
+                { administrator: true }
+            );
+        }
+
+        listAdministratorPayments(limit = 100) {
+            return this.request(
+                `/api/admin/payments?limit=${encodeURIComponent(limit)}`,
                 { administrator: true }
             );
         }
