@@ -39,6 +39,17 @@ export {
     ManagedStagingApprovalRegistry
 } from "./managed-staging-approval-registry.js";
 export { ManagedStagingEvaluationService } from "./managed-staging-evaluation-service.js";
+export {
+    PROVIDER_CANDIDATE_CLAIM_STATUSES,
+    PROVIDER_CANDIDATE_CONTROL_IDS,
+    PROVIDER_CANDIDATE_NEXT_VERIFICATIONS,
+    PROVIDER_CANDIDATE_PACK_VERSION,
+    PROVIDER_CANDIDATE_SCOPE,
+    createProviderCandidatePack,
+    providerCandidatePackDigest,
+    readProviderCandidatePack
+} from "./provider-candidate-assessment.js";
+export { compareProviderCandidatePacks } from "./provider-candidate-comparison.js";
 export { RecoverySafetyService } from "./recovery-safety-service.js";
 export { RestoredDataReconciler } from "./restored-data-reconciler.js";
 export {

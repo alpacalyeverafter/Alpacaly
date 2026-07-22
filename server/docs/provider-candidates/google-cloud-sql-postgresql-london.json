@@ -1,0 +1,320 @@
+{
+  "packVersion": 1,
+  "packId": "google-cloud-sql-postgresql-london-2026-07-22",
+  "packDigest": "21aecdae5967ae94b4805a8f48f7168ffa72b835e60b2e4e2dd3c5b73f604e8f",
+  "reviewedAt": "2026-07-22T10:30:00.000Z",
+  "scope": "PUBLISHED_DOCUMENT_REVIEW_ONLY",
+  "candidate": {
+    "providerLabel": "Google Cloud",
+    "serviceLabel": "Cloud SQL for PostgreSQL",
+    "regionLabel": "London",
+    "regionCode": "europe-west2",
+    "postgresqlMajorVersion": 16,
+    "officialDocumentationDomains": ["docs.cloud.google.com", "cloud.google.com"]
+  },
+  "sources": [
+    {
+      "sourceId": "gcp-cloud-sql-versions",
+      "publisher": "Google Cloud",
+      "title": "Database versions and version policies",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/db-versions",
+      "accessedAt": "2026-07-22T09:00:00.000Z",
+      "documentDate": "2026-07-17"
+    },
+    {
+      "sourceId": "gcp-cloud-sql-locations",
+      "publisher": "Google Cloud",
+      "title": "Manage instance locations",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/locations",
+      "accessedAt": "2026-07-22T09:05:00.000Z",
+      "documentDate": "2026-07-17"
+    },
+    {
+      "sourceId": "gcp-cloud-sql-encryption",
+      "publisher": "Google Cloud",
+      "title": "Cloud SQL for PostgreSQL FAQ",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/faq",
+      "accessedAt": "2026-07-22T09:10:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-tls",
+      "publisher": "Google Cloud",
+      "title": "Authorize with SSL/TLS certificates",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/authorize-ssl",
+      "accessedAt": "2026-07-22T09:15:00.000Z",
+      "documentDate": "2026-06-18"
+    },
+    {
+      "sourceId": "gcp-cloud-sql-private-ip",
+      "publisher": "Google Cloud",
+      "title": "Learn about using private IP",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/private-ip",
+      "accessedAt": "2026-07-22T09:20:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-backups",
+      "publisher": "Google Cloud",
+      "title": "Cloud SQL backups overview",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/backups",
+      "accessedAt": "2026-07-22T09:25:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-pitr",
+      "publisher": "Google Cloud",
+      "title": "Perform point-in-time recovery",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/pitr",
+      "accessedAt": "2026-07-22T09:30:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-restore",
+      "publisher": "Google Cloud",
+      "title": "Restore an instance overview",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/restore",
+      "accessedAt": "2026-07-22T09:35:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-native-tools",
+      "publisher": "Google Cloud",
+      "title": "Export and import using pg_dump, pg_dumpall, and pg_restore",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/import-export/import-export-dmp",
+      "accessedAt": "2026-07-22T09:40:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-monitoring",
+      "publisher": "Google Cloud",
+      "title": "Monitor Cloud SQL instances",
+      "url": "https://docs.cloud.google.com/sql/docs/postgres/monitor-instance",
+      "accessedAt": "2026-07-22T09:45:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-cloud-sql-pricing",
+      "publisher": "Google Cloud",
+      "title": "Cloud SQL pricing",
+      "url": "https://cloud.google.com/sql/pricing/",
+      "accessedAt": "2026-07-22T09:50:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "gcp-support",
+      "publisher": "Google Cloud",
+      "title": "Google Cloud customer care",
+      "url": "https://cloud.google.com/support/",
+      "accessedAt": "2026-07-22T09:55:00.000Z",
+      "documentDate": null
+    }
+  ],
+  "claims": [
+    {
+      "controlId": "managed-postgresql",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents Cloud SQL as a managed relational database service with PostgreSQL editions.",
+      "sourceIds": ["gcp-cloud-sql-versions"],
+      "nextVerification": "TECHNICAL_REVIEW",
+      "limitations": ["No Cloud SQL project, instance or control-plane configuration was inspected."]
+    },
+    {
+      "controlId": "postgresql-16-or-newer",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google's version policy lists PostgreSQL 16 as supported by Cloud SQL.",
+      "sourceIds": ["gcp-cloud-sql-versions"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["The exact edition, minor version and London machine availability were not queried."]
+    },
+    {
+      "controlId": "uk-region",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google's Cloud SQL locations page lists europe-west2 as London.",
+      "sourceIds": ["gcp-cloud-sql-locations"],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["Instance location alone does not settle backup location or international transfer obligations."]
+    },
+    {
+      "controlId": "encrypted-storage",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents Cloud SQL customer data encryption at rest.",
+      "sourceIds": ["gcp-cloud-sql-encryption"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No key hierarchy, CMEK option or configured instance was inspected."]
+    },
+    {
+      "controlId": "encrypted-backups",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents encryption of Cloud SQL backups as part of its data-at-rest controls.",
+      "sourceIds": ["gcp-cloud-sql-encryption", "gcp-cloud-sql-backups"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["No backup metadata, encryption evidence or restored target was inspected."]
+    },
+    {
+      "controlId": "point-in-time-recovery",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents point-in-time recovery for Cloud SQL PostgreSQL instances.",
+      "sourceIds": ["gcp-cloud-sql-pitr"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["No transaction-boundary RPO, log continuity or recovery gap was measured."]
+    },
+    {
+      "controlId": "isolated-restore",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents restoring backups or PITR into a new Cloud SQL instance, including another project or region in supported cases.",
+      "sourceIds": ["gcp-cloud-sql-restore"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["Alpacaly target-isolation and empty-target checks were not exercised against Cloud SQL."]
+    },
+    {
+      "controlId": "tls-and-hostname-verification",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents SSL/TLS, CA validation and server identity verification options for Cloud SQL.",
+      "sourceIds": ["gcp-cloud-sql-tls"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No enforced SSL mode, CA hierarchy, DNS name or verify-full client connection was inspected."]
+    },
+    {
+      "controlId": "private-networking",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents private IP connectivity through private services access for Cloud SQL.",
+      "sourceIds": ["gcp-cloud-sql-private-ip"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["Public IP disablement, VPC routing, DNS and firewall controls were not configured or tested."]
+    },
+    {
+      "controlId": "native-dump-and-restore",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents pg_dump, pg_dumpall and pg_restore workflows for Cloud SQL PostgreSQL.",
+      "sourceIds": ["gcp-cloud-sql-native-tools"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["Alpacaly extensions, roles, triggers and complete export portability were not tested."]
+    },
+    {
+      "controlId": "monitoring-and-alerting",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google publishes Cloud SQL instance monitoring through Cloud Monitoring metrics and dashboards.",
+      "sourceIds": ["gcp-cloud-sql-monitoring"],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["No Alpacaly alert policy, route, threshold, delivery or on-call response was configured."]
+    },
+    {
+      "controlId": "least-privilege-role-separation",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "The reviewed material establishes managed service and networking boundaries, but does not prove Alpacaly's separate application, migration, backup, restore and monitoring roles.",
+      "sourceIds": ["gcp-cloud-sql-private-ip", "gcp-cloud-sql-native-tools"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No IAM policy, database role, service account, break-glass control or role audit was inspected."]
+    },
+    {
+      "controlId": "secret-management-and-rotation",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "This candidate review did not establish the exact Alpacaly secret-storage and rotation design.",
+      "sourceIds": [],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["General Google Secret Manager integration was outside this Cloud SQL candidate evidence review."]
+    },
+    {
+      "controlId": "administrative-audit-logging",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google publishes monitoring capabilities, but this review did not prove complete immutable administrative audit coverage for the proposed design.",
+      "sourceIds": ["gcp-cloud-sql-monitoring"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No Cloud Audit Logs export, retention rule or identity-backed reviewer evidence was inspected."]
+    },
+    {
+      "controlId": "backup-retention-and-deletion",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google publishes Cloud SQL backup and retention capabilities.",
+      "sourceIds": ["gcp-cloud-sql-backups"],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["Required daily, weekly, monthly, minimum-retention and deletion-evidence policy was not configured."]
+    },
+    {
+      "controlId": "legal-and-incident-hold",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "The reviewed Cloud SQL documents did not establish an approved legal or incident hold workflow for Alpacaly backups.",
+      "sourceIds": [],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["The existing Alpacaly hold registry still requires an approved provider-side operating procedure."]
+    },
+    {
+      "controlId": "service-limits",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "This review did not record the applicable London quotas, connection limits, storage bounds or restore constraints for the proposed edition and size.",
+      "sourceIds": [],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["Edition, project quota and machine-specific limits require a later controlled review."]
+    },
+    {
+      "controlId": "incident-history",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "No decision-grade incident-history review was completed for this candidate.",
+      "sourceIds": [],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["A public status view is not equivalent to contractual or candidate-specific incident evidence."]
+    },
+    {
+      "controlId": "support-response",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google publishes customer-care information, but no plan was selected and no response commitment was accepted.",
+      "sourceIds": ["gcp-support"],
+      "nextVerification": "CONTRACT_REVIEW",
+      "limitations": ["Entitlement, response target, escalation route and cost require independent contractual review."]
+    },
+    {
+      "controlId": "cost-evidence",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google publishes variable Cloud SQL pricing components, but this review does not contain an approved London architecture or monthly quote.",
+      "sourceIds": ["gcp-cloud-sql-pricing"],
+      "nextVerification": "FINANCE_REVIEW",
+      "limitations": ["Edition, compute, storage, backup, network, monitoring, support and tax assumptions remain unpriced."]
+    },
+    {
+      "controlId": "uk-data-transfer-review",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Google documents a London region for Cloud SQL, but this is not a completed UK data-transfer or privacy assessment.",
+      "sourceIds": ["gcp-cloud-sql-locations"],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["Backup locations, support access, telemetry, subprocessors and contractual transfers remain unreviewed."]
+    },
+    {
+      "controlId": "alpacaly-restore-safety-drill",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "Published Google documentation cannot prove Alpacaly recovery-safety mode, claim fencing, emergency-stop preservation or OUTCOME_UNKNOWN handling.",
+      "sourceIds": [],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["A disposable provider-backed restore drill is mandatory before any later staging evaluation can pass."]
+    }
+  ],
+  "commercial": {
+    "pricingReview": "PUBLISHED_VARIABLES_ONLY",
+    "supportReview": "PUBLISHED_PLANS_ONLY",
+    "quoteRequired": true,
+    "contractReviewRequired": true
+  },
+  "openQuestions": [
+    "Which London edition and deployment shape meets the proposed RPO and RTO without relying on untested assumptions?",
+    "How will separate application, migration, backup, restore and monitoring identities be enforced and audited?",
+    "What backup, PITR and telemetry data can leave the UK region under normal operations or support access?",
+    "What customer-care tier, escalation route and response commitment would be contractually available?",
+    "What are the full monthly costs for HA, backups, PITR, monitoring, transfer, support and restore drills?",
+    "How will legal holds and deletion evidence be applied without weakening the existing append-only catalogue?"
+  ],
+  "collection": {
+    "method": "PUBLISHED_DOCUMENTATION_ONLY",
+    "reviewerReference": "phase-7f2d-doc-review"
+  },
+  "declarations": {
+    "accountsCreated": false,
+    "credentialsUsed": false,
+    "providerApiCallsMade": false,
+    "databasesConnected": false,
+    "resourcesProvisioned": false,
+    "providerSelected": false,
+    "stagingAuthorized": false,
+    "productionAuthorized": false,
+    "externalConnectionsAuthorized": false
+  }
+}

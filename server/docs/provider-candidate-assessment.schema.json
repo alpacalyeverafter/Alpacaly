@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpacaly.example/schemas/provider-candidate-assessment-v1.json",
+  "title": "Alpacaly published-document provider candidate pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packVersion", "packId", "reviewedAt", "scope", "candidate", "sources",
+    "claims", "commercial", "openQuestions", "collection", "declarations"
+  ],
+  "properties": {
+    "packVersion": { "const": 1 },
+    "packId": { "$ref": "#/$defs/identifier" },
+    "packDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "reviewedAt": { "type": "string", "format": "date-time" },
+    "scope": { "const": "PUBLISHED_DOCUMENT_REVIEW_ONLY" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerLabel", "serviceLabel", "regionLabel", "regionCode",
+        "postgresqlMajorVersion", "officialDocumentationDomains"
+      ],
+      "properties": {
+        "providerLabel": { "$ref": "#/$defs/shortText" },
+        "serviceLabel": { "$ref": "#/$defs/shortText" },
+        "regionLabel": { "$ref": "#/$defs/shortText" },
+        "regionCode": { "$ref": "#/$defs/identifier" },
+        "postgresqlMajorVersion": { "type": "integer", "minimum": 16 },
+        "officialDocumentationDomains": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "publisher", "title", "url", "accessedAt", "documentDate"],
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/identifier" },
+          "publisher": { "$ref": "#/$defs/shortText" },
+          "title": { "$ref": "#/$defs/longText" },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "accessedAt": { "type": "string", "format": "date-time" },
+          "documentDate": {
+            "anyOf": [
+              { "type": "string", "format": "date" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 22,
+      "maxItems": 22,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "controlId", "status", "summary", "sourceIds", "nextVerification", "limitations"
+        ],
+        "properties": {
+          "controlId": { "$ref": "#/$defs/controlId" },
+          "status": {
+            "enum": [
+              "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+              "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+              "NOT_FOUND_IN_REVIEWED_DOCUMENTATION"
+            ]
+          },
+          "summary": { "$ref": "#/$defs/claimText" },
+          "sourceIds": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/identifier" }
+          },
+          "nextVerification": {
+            "enum": [
+              "TECHNICAL_REVIEW", "SECURITY_REVIEW", "OPERATIONS_REVIEW",
+              "DATA_GOVERNANCE_REVIEW", "FINANCE_REVIEW", "CONTRACT_REVIEW",
+              "STAGING_TEST"
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/longText" }
+          }
+        }
+      }
+    },
+    "commercial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pricingReview", "supportReview", "quoteRequired", "contractReviewRequired"],
+      "properties": {
+        "pricingReview": { "enum": ["PUBLISHED_VARIABLES_ONLY", "NOT_FOUND"] },
+        "supportReview": { "enum": ["PUBLISHED_PLANS_ONLY", "NOT_FOUND"] },
+        "quoteRequired": { "const": true },
+        "contractReviewRequired": { "const": true }
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/claimText" }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "reviewerReference"],
+      "properties": {
+        "method": { "const": "PUBLISHED_DOCUMENTATION_ONLY" },
+        "reviewerReference": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "declarations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accountsCreated", "credentialsUsed", "providerApiCallsMade",
+        "databasesConnected", "resourcesProvisioned", "providerSelected",
+        "stagingAuthorized", "productionAuthorized", "externalConnectionsAuthorized"
+      ],
+      "properties": {
+        "accountsCreated": { "const": false },
+        "credentialsUsed": { "const": false },
+        "providerApiCallsMade": { "const": false },
+        "databasesConnected": { "const": false },
+        "resourcesProvisioned": { "const": false },
+        "providerSelected": { "const": false },
+        "stagingAuthorized": { "const": false },
+        "productionAuthorized": { "const": false },
+        "externalConnectionsAuthorized": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "shortText": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "longText": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "claimText": { "type": "string", "minLength": 1, "maxLength": 700 },
+    "controlId": {
+      "enum": [
+        "managed-postgresql", "postgresql-16-or-newer", "uk-region",
+        "encrypted-storage", "encrypted-backups", "point-in-time-recovery",
+        "isolated-restore", "tls-and-hostname-verification", "private-networking",
+        "native-dump-and-restore", "monitoring-and-alerting",
+        "least-privilege-role-separation", "secret-management-and-rotation",
+        "administrative-audit-logging", "backup-retention-and-deletion",
+        "legal-and-incident-hold", "service-limits", "incident-history",
+        "support-response", "cost-evidence", "uk-data-transfer-review",
+        "alpacaly-restore-safety-drill"
+      ]
+    }
+  }
+}

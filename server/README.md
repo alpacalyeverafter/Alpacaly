@@ -96,6 +96,8 @@ Included:
 - Provider-neutral backup catalogue, retention calculations, diagnostics, and CI restore drill
 - Allow-listed, checksummed managed-provider backup/PITR evidence and fail-closed operational checks
 - Append-only incident/legal backup holds that protect retention calculations
+- Offline, checksummed published-document candidate packs and a non-ranking,
+  non-authorizing comparison for two London managed PostgreSQL candidates
 
 Intentionally excluded:
 
@@ -233,6 +235,14 @@ Restore never starts writers or workers. After checksum validation, restore, cla
 Phase 7F-2B2 also accepts secret-free evidence from a deployment-owned managed-provider exporter and exits non-zero on stale backups, PITR/WAL gaps, proposed-RPO regression, missing access controls, or overdue restore drills. Incident/legal holds are explicit append-only operations and never delete a backup. See [Managed backup operations](docs/phase-7f-2b2-managed-backup-operations.md) for the evidence schema, scheduler contract, commands, alerts, holds, and managed-staging acceptance evidence.
 
 Phase 7F-2C adds a provider-neutral managed-staging assessment and independent sign-off framework. It scores isolated restore evidence, captures measured RPO/RTO, checks TLS/network/role/secret boundaries, records portability/cost/support evidence, and returns `BLOCKED`, `WARNING`, or staging-only `PASS`. Every result explicitly denies production readiness and external connections. See [Managed staging evaluation](docs/phase-7f-2c-managed-staging-evaluation.md) for the schema, gates, approval workflow, command, and limitations.
+
+Phase 7F-2D adds two published-document-only candidate packs and an offline
+comparison command. It validates official documentation URLs, requires every
+Phase 7F-2C control and follow-up verification step, detects pack tampering, and
+always keeps account creation, provider selection, database connections, staging
+and production authorization off. It does not score or recommend a provider. See
+[Provider candidate assessments](docs/phase-7f-2d-provider-candidate-assessments.md)
+for the candidate sources, schema, command, safety boundary, and limitations.
 
 ## Simulated controller and MQTT architecture
 
