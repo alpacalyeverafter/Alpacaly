@@ -7,6 +7,11 @@ provider exporter, staging account, alert route, measured drills, and governance
 approval are still outstanding, so the requirements below remain the handoff for
 the managed-staging evaluation rather than a completed provider selection.
 
+The provider-neutral assessment, scoring, and sign-off contract for that review
+is now defined in
+[Phase 7F-2C managed staging evaluation](phase-7f-2c-managed-staging-evaluation.md).
+It does not replace the provider validation evidence below.
+
 Phase 7F-2B1 does not select or purchase a managed provider. The later staging
 phase must evaluate and record the following before any production claim.
 

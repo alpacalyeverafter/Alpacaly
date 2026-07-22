@@ -232,6 +232,8 @@ Restore never starts writers or workers. After checksum validation, restore, cla
 
 Phase 7F-2B2 also accepts secret-free evidence from a deployment-owned managed-provider exporter and exits non-zero on stale backups, PITR/WAL gaps, proposed-RPO regression, missing access controls, or overdue restore drills. Incident/legal holds are explicit append-only operations and never delete a backup. See [Managed backup operations](docs/phase-7f-2b2-managed-backup-operations.md) for the evidence schema, scheduler contract, commands, alerts, holds, and managed-staging acceptance evidence.
 
+Phase 7F-2C adds a provider-neutral managed-staging assessment and independent sign-off framework. It scores isolated restore evidence, captures measured RPO/RTO, checks TLS/network/role/secret boundaries, records portability/cost/support evidence, and returns `BLOCKED`, `WARNING`, or staging-only `PASS`. Every result explicitly denies production readiness and external connections. See [Managed staging evaluation](docs/phase-7f-2c-managed-staging-evaluation.md) for the schema, gates, approval workflow, command, and limitations.
+
 ## Simulated controller and MQTT architecture
 
 The Device Command worker depends only on `DeviceTransport`. Phase 7E-2 keeps the

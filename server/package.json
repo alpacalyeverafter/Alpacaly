@@ -17,6 +17,7 @@
     "test:postgres:restore": "node --test --test-concurrency=1 test/postgres-backup-restore.test.js",
     "backup:postgres": "node scripts/postgres-backup.js",
     "check:managed-backups": "node scripts/managed-backup-check.js",
+    "evaluate:managed-staging": "node scripts/managed-staging-evaluate.js",
     "hold:postgres-backup": "node scripts/postgres-backup-hold.js",
     "restore:postgres": "node scripts/postgres-restore.js",
     "reconcile:postgres-restore": "node scripts/postgres-reconcile-restore.js",

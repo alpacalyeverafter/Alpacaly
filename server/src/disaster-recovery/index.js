@@ -27,6 +27,18 @@ export {
     writeManagedBackupEvidence
 } from "./managed-backup-evidence.js";
 export { ManagedBackupOperationsService } from "./managed-backup-operations-service.js";
+export {
+    MANAGED_STAGING_ASSESSMENT_VERSION,
+    createManagedStagingAssessment,
+    managedStagingAssessmentDigest,
+    readManagedStagingAssessment,
+    writeManagedStagingAssessment
+} from "./managed-staging-assessment.js";
+export {
+    MANAGED_STAGING_APPROVAL_AUTHORITIES,
+    ManagedStagingApprovalRegistry
+} from "./managed-staging-approval-registry.js";
+export { ManagedStagingEvaluationService } from "./managed-staging-evaluation-service.js";
 export { RecoverySafetyService } from "./recovery-safety-service.js";
 export { RestoredDataReconciler } from "./restored-data-reconciler.js";
 export {
