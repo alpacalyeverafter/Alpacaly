@@ -41,7 +41,7 @@ export function createPaymentsRouter({ paymentService }) {
     return router;
 }
 
-export function createStripeWebhookRouter({ paymentService }) {
+export function createStripeWebhookRouter({ paymentService, sandboxDiagnosticsService }) {
     const router = Router();
 
     router.post("/", (req, res, next) => {
@@ -50,6 +50,7 @@ export function createStripeWebhookRouter({ paymentService }) {
                 req.body,
                 req.get("stripe-signature")
             );
+            sandboxDiagnosticsService?.recordWebhookResult(result);
             res.status(200).json({
                 received: true,
                 duplicate: Boolean(result.duplicate),
@@ -58,6 +59,7 @@ export function createStripeWebhookRouter({ paymentService }) {
                 requestId: req.requestId
             });
         } catch (error) {
+            sandboxDiagnosticsService?.recordWebhookRejection(error);
             next(error);
         }
     });

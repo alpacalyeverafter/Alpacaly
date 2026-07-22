@@ -102,6 +102,31 @@ test("browser API client sends only the configured development identity to admin
     assert.equal(capturedRequests[2].options.headers.authorization, undefined);
 });
 
+test("browser API client reads protected sandbox diagnostics without a request body", async () => {
+    let capturedRequest;
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        developmentAdministratorIdentity: "local-admin",
+        fetchImpl: async (url, options) => {
+            capturedRequest = { url, options };
+            return jsonResponse({ sandboxDiagnostics: { sandboxMode: "ENABLED" } });
+        }
+    });
+
+    await client.getSandboxDiagnostics();
+
+    assert.equal(
+        capturedRequest.url,
+        "http://localhost:3000/api/admin/diagnostics/sandbox"
+    );
+    assert.equal(capturedRequest.options.method, "GET");
+    assert.equal(capturedRequest.options.body, undefined);
+    assert.equal(
+        capturedRequest.options.headers.authorization,
+        "Development local-admin"
+    );
+});
+
 test("browser API client sends protected operator-safety actions to dedicated administrator APIs", async () => {
     const capturedRequests = [];
     const client = new AlpacalyApiClient({

@@ -51,6 +51,32 @@
             </div>
         </section>
 
+        <section class="section alternate" style="margin-top: 24px; border-radius: 16px; text-align: left;">
+            <div class="label">Sandbox Diagnostics</div>
+            <div class="status-grid" style="margin-top: 20px;">
+                <article class="status-card">
+                    <strong id="sandbox-mode-status">Checking</strong>
+                    <span>Sandbox Mode</span>
+                </article>
+                <article class="status-card">
+                    <strong id="sandbox-api-status">Checking</strong>
+                    <span>API Status</span>
+                </article>
+                <article class="status-card">
+                    <strong id="stripe-adapter-status">Checking</strong>
+                    <span>Stripe Adapter</span>
+                </article>
+                <article class="status-card">
+                    <strong id="sandbox-webhook-status">Checking</strong>
+                    <span id="sandbox-webhook-detail">No webhook received</span>
+                </article>
+                <article class="status-card">
+                    <strong id="sandbox-event-status">No event</strong>
+                    <span id="sandbox-event-detail">No accepted or rejected event</span>
+                </article>
+            </div>
+        </section>
+
         <section class="section" style="padding-top: 20px; padding-bottom: 20px; text-align: left;">
             <div class="label">Feeding Now</div>
             <div id="feeding-now" class="status-card" style="margin-bottom: 18px; max-width: 1100px; margin-left: auto; margin-right: auto;"></div>

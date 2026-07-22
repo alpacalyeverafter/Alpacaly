@@ -6,10 +6,12 @@ const config = loadConfig();
 const logger = createLogger(config);
 const app = createApp({ config, logger });
 
-const server = app.listen(config.port, () => {
+const sandboxDemoHost = process.env.SANDBOX_DEMO_BIND_HOST || undefined;
+const server = app.listen(config.port, sandboxDemoHost, () => {
     logger.info({
         event: "server_started",
         port: config.port,
+        ...(sandboxDemoHost ? { host: sandboxDemoHost } : {}),
         nodeVersion: process.version
     }, "Alpacaly server started");
 });

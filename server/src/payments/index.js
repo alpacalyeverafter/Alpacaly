@@ -1,4 +1,5 @@
 import { PaymentService } from "./payment-service.js";
+import { SandboxDiagnosticsService } from "./sandbox-diagnostics-service.js";
 import { StripeTestPaymentAdapter } from "./stripe-test-payment-adapter.js";
 
 export function createPaymentServices({
@@ -27,5 +28,10 @@ export function createPaymentServices({
         clock,
         ...(idGenerator ? { idGenerator } : {})
     });
-    return { paymentAdapter, paymentService };
+    const sandboxDiagnosticsService = new SandboxDiagnosticsService({
+        config,
+        paymentAdapter,
+        clock
+    });
+    return { paymentAdapter, paymentService, sandboxDiagnosticsService };
 }

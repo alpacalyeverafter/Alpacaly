@@ -28,6 +28,15 @@
     const activateEmergencyStopButton = document.getElementById(
         "activate-emergency-stop"
     );
+    const sandboxDiagnosticElements = {
+        mode: document.getElementById("sandbox-mode-status"),
+        api: document.getElementById("sandbox-api-status"),
+        adapter: document.getElementById("stripe-adapter-status"),
+        webhook: document.getElementById("sandbox-webhook-status"),
+        webhookDetail: document.getElementById("sandbox-webhook-detail"),
+        event: document.getElementById("sandbox-event-status"),
+        eventDetail: document.getElementById("sandbox-event-detail")
+    };
 
     if (!eventEngine || !apiClient) {
         console.error("[Admin] Feed service modules were not loaded.");
@@ -39,6 +48,7 @@
     let activeEventId = null;
     let administratorAuthenticated = false;
     let paymentRefreshInFlight = false;
+    let sandboxDiagnosticsRefreshInFlight = false;
 
     function formatCurrency(value) {
         return `£${Number(value || 0).toFixed(2)}`;
@@ -332,6 +342,62 @@
         });
     }
 
+    function formatDiagnosticTime(value) {
+        if (!value) {
+            return "No webhook received";
+        }
+        const time = new Date(value);
+        return Number.isNaN(time.getTime())
+            ? "Last received time unavailable"
+            : `Last received ${time.toLocaleString()}`;
+    }
+
+    function renderSandboxDiagnostics(diagnostics = null, unavailableMessage = null) {
+        if (!diagnostics) {
+            sandboxDiagnosticElements.mode.textContent = "Unavailable";
+            sandboxDiagnosticElements.api.textContent = "Unavailable";
+            sandboxDiagnosticElements.adapter.textContent = "Unavailable";
+            sandboxDiagnosticElements.webhook.textContent = "Unavailable";
+            sandboxDiagnosticElements.webhookDetail.textContent = unavailableMessage
+                || "Diagnostics could not be read";
+            sandboxDiagnosticElements.event.textContent = "Unavailable";
+            sandboxDiagnosticElements.eventDetail.textContent = "No event status available";
+            return;
+        }
+        sandboxDiagnosticElements.mode.textContent = diagnostics.sandboxMode;
+        sandboxDiagnosticElements.api.textContent = diagnostics.apiStatus;
+        sandboxDiagnosticElements.adapter.textContent = diagnostics.stripeAdapterStatus;
+        sandboxDiagnosticElements.webhook.textContent = diagnostics.webhook.status;
+        sandboxDiagnosticElements.webhookDetail.textContent = formatDiagnosticTime(
+            diagnostics.webhook.lastReceivedAt
+        );
+        const latestEvent = diagnostics.latestEvent;
+        sandboxDiagnosticElements.event.textContent = latestEvent?.status || "No event";
+        sandboxDiagnosticElements.eventDetail.textContent = latestEvent
+            ? [
+                latestEvent.eventType || "Event type unavailable",
+                latestEvent.duplicate ? "Duplicate delivery" : null,
+                latestEvent.reasonCode || null,
+                formatDiagnosticTime(latestEvent.receivedAt)
+            ].filter(Boolean).join(" • ")
+            : "No accepted or rejected event";
+    }
+
+    async function refreshSandboxDiagnostics() {
+        if (!administratorAuthenticated || sandboxDiagnosticsRefreshInFlight) {
+            return;
+        }
+        sandboxDiagnosticsRefreshInFlight = true;
+        try {
+            const response = await apiClient.getSandboxDiagnostics();
+            renderSandboxDiagnostics(response.sandboxDiagnostics);
+        } catch (error) {
+            renderSandboxDiagnostics(null, error.message);
+        } finally {
+            sandboxDiagnosticsRefreshInFlight = false;
+        }
+    }
+
     async function renderPayments() {
         if (!administratorAuthenticated || paymentRefreshInFlight) {
             return;
@@ -539,7 +605,7 @@
             administratorAuthenticated = true;
             eventEngine.subscribe(renderState);
             renderState(eventEngine.getState());
-            await renderPayments();
+            await Promise.all([renderPayments(), refreshSandboxDiagnostics()]);
         } catch (error) {
             administratorAuthenticated = false;
             stateElements.serverStatus.textContent = "Authentication required";
@@ -548,6 +614,7 @@
                 message: "Administrator authentication is required."
             });
             renderWaitingQueue([], "Administrator authentication is required.");
+            renderSandboxDiagnostics(null, "Administrator authentication is required.");
         }
     }
 
@@ -556,6 +623,7 @@
     renderEmergencyStops([]);
     renderApprovalRequests([]);
     renderResolutionCases([]);
+    renderSandboxDiagnostics();
     activateEmergencyStopButton?.addEventListener("click", () => {
         const reason = emergencyStopReason.value.trim();
         if (!reason) {
@@ -577,6 +645,9 @@
             "Emergency stop activated."
         );
     });
-    window.setInterval(() => void renderPayments(), 5000);
+    window.setInterval(() => {
+        void renderPayments();
+        void refreshSandboxDiagnostics();
+    }, 5000);
     void initializeAdministrator();
 })();
