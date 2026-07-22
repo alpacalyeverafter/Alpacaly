@@ -50,6 +50,18 @@ test("configuration rejects live Stripe keys", () => {
     );
 });
 
+test("configuration rejects non-local payment sandbox URLs", () => {
+    assert.throws(
+        () => loadConfig({
+            NODE_ENV: "development",
+            DATABASE_PATH: ":memory:",
+            ENABLE_PAYMENT_SANDBOX: "true",
+            PAYMENT_PUBLIC_BASE_URL: "https://payments.example.com"
+        }, { loadEnvFile: false }),
+        /must use a loopback host/
+    );
+});
+
 test("GET /health reports service health", async () => {
     const response = await request(createTestApp()).get("/health").expect(200);
 

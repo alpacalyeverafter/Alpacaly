@@ -92,6 +92,11 @@ function parseHttpUrl(value, fallback, name) {
     return parsed.toString().replace(/\/$/, "");
 }
 
+function isLoopbackUrl(value) {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname);
+}
+
 function optionalAbsolutePath(value, name) {
     const normalized = optionalString(value);
     if (!normalized) {
@@ -705,6 +710,11 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     }
     if (config.workerStaleThresholdMs < config.workerLeaseDurationMs) {
         throw new Error("WORKER_STALE_THRESHOLD_MS must be at least the worker lease duration.");
+    }
+    if (config.paymentSandboxEnabled && !isLoopbackUrl(config.paymentPublicBaseUrl)) {
+        throw new Error(
+            "PAYMENT_PUBLIC_BASE_URL must use a loopback host when the payment sandbox is enabled."
+        );
     }
     if (!config.postgresApplicationName) {
         throw new Error("POSTGRES_APPLICATION_NAME must not be empty.");

@@ -115,7 +115,8 @@ export function createApp(options = {}) {
             limit: config.paymentWebhookBodyLimit
         }),
         createStripeWebhookRouter({
-            paymentService: paymentServices.paymentService
+            paymentService: paymentServices.paymentService,
+            sandboxDiagnosticsService: paymentServices.sandboxDiagnosticsService
         })
     );
     app.use(express.json({ limit: config.requestBodyLimit }));

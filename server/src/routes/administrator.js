@@ -237,6 +237,23 @@ export function createAdministratorRouter({
     );
 
     router.get(
+        "/diagnostics/sandbox",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_AUDIT_HISTORY,
+            () => ({ targetType: "SANDBOX_PAYMENT_DIAGNOSTICS" }),
+            { platformWide: true }
+        ),
+        (req, res) => {
+            res.status(200).json({
+                sandboxDiagnostics: paymentServices.sandboxDiagnosticsService
+                    .getDiagnostics(),
+                requestId: req.requestId
+            });
+        }
+    );
+
+    router.get(
         "/payments",
         authorize(
             services,

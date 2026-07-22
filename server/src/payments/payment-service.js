@@ -1,5 +1,6 @@
 import { createPaymentRequest, PAYMENT_STATUSES } from "../domain/payments.js";
 import { ApplicationError } from "../errors/application-error.js";
+import { STRIPE_SANDBOX_EVENT_TYPE_SET } from "./sandbox-event-types.js";
 
 const COMPLETION_EVENTS = new Set([
     "checkout.session.completed",
@@ -137,6 +138,12 @@ export class PaymentService {
                 statusCode: 400
             });
         }
+        if (!STRIPE_SANDBOX_EVENT_TYPE_SET.has(event.type)) {
+            throw new ApplicationError("This Stripe event is not accepted by the sandbox.", {
+                code: "PAYMENT_EVENT_NOT_ALLOWED",
+                statusCode: 400
+            });
+        }
         const object = event?.data?.object || {};
         const ingestion = this.ledger.providerEventIngestionService.ingest({
             provider: "STRIPE",
@@ -192,7 +199,8 @@ export class PaymentService {
             received: true,
             duplicate: ingestion.duplicate,
             handled: false,
-            eventType: event.type
+            eventType: event.type,
+            reason: "UNHANDLED_PAYMENT_EVENT"
         };
     }
 
@@ -220,6 +228,7 @@ export class PaymentService {
                 handled: true,
                 duplicate: ingestion.duplicate,
                 accepted: false,
+                eventType: event.type,
                 reason: mismatch,
                 paymentRequest: paymentRequest
                     ? this.getPaymentRequestView(paymentRequest.paymentRequestId)
@@ -251,6 +260,7 @@ export class PaymentService {
                 handled: true,
                 accepted: false,
                 duplicate: ingestion.duplicate,
+                eventType: event.type,
                 reason: "CONTRIBUTION_REJECTED",
                 paymentRequest: this.getPaymentRequestView(
                     paymentRequest.paymentRequestId
@@ -297,6 +307,7 @@ export class PaymentService {
             handled: true,
             accepted: true,
             duplicate: ingestion.duplicate,
+            eventType: event.type,
             paymentRequest: this.getPaymentRequestView(updated.paymentRequestId)
         };
     }
@@ -313,6 +324,7 @@ export class PaymentService {
                 handled: true,
                 duplicate: ingestion.duplicate,
                 accepted: false,
+                eventType: event.type,
                 reason: "PAYMENT_REQUEST_NOT_FOUND"
             };
         }
@@ -327,6 +339,7 @@ export class PaymentService {
             handled: true,
             duplicate: ingestion.duplicate,
             accepted: false,
+            eventType: event.type,
             paymentRequest: this.getPaymentRequestView(updated.paymentRequestId)
         };
     }

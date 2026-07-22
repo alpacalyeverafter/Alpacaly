@@ -111,6 +111,12 @@
             );
         }
 
+        getSandboxDiagnostics() {
+            return this.request("/api/admin/diagnostics/sandbox", {
+                administrator: true
+            });
+        }
+
         listEmergencyStops(barnId) {
             return this.request(
                 `/api/admin/safety/emergency-stops?barnId=${encodeURIComponent(barnId)}`,

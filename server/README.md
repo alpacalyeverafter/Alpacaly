@@ -1,5 +1,25 @@
 # Alpacaly Event Engine Server
 
+## Phase 8B hardened sandbox pilot
+
+Start the complete local Stripe Test Mode demonstration from the repository root
+with one fail-closed command:
+
+```sh
+npm --prefix server run sandbox:demo
+```
+
+The supervisor validates the local-only test configuration, starts and labels
+the API, existing website and allow-listed Stripe event forwarder, redacts
+secret-shaped output, and stops every child on Control+C or component failure.
+The existing Admin Overview now includes read-only, secret-free sandbox
+diagnostics. Sandbox mode moves no real money; live payments, public deployment
+and physical hardware remain unauthorized.
+
+See [Phase 8B: Sandbox Pilot Hardening Runbook](docs/phase-8b-sandbox-pilot-hardening.md)
+for first-time setup, one-command operation, safe test cards, fixture scenarios,
+troubleshooting, shutdown and security boundaries.
+
 ## Phase 8A sandbox-payment website MVP
 
 The existing website can now create a server-side Stripe Test Mode Checkout

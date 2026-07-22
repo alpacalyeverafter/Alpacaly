@@ -210,6 +210,12 @@ test("duplicate signed webhook delivery is provider-scoped and replay safe", asy
             `${table} must contain exactly one record`
         );
     }
+    const diagnostics = await request(app)
+        .get("/api/admin/diagnostics/sandbox")
+        .set("authorization", "Development local-admin")
+        .expect(200);
+    assert.equal(diagnostics.body.sandboxDiagnostics.latestEvent.status, "ACCEPTED");
+    assert.equal(diagnostics.body.sandboxDiagnostics.latestEvent.duplicate, true);
 });
 
 test("bad and stale Stripe signatures are rejected before ingestion", async t => {
@@ -231,6 +237,57 @@ test("bad and stale Stripe signatures are rejected before ingestion", async t =>
         .expect(response => {
             assert.equal(response.body.error.code, "PAYMENT_WEBHOOK_STALE");
         });
+    assert.equal(
+        eventEngine.eventStore.database.prepare(
+            "SELECT COUNT(*) AS count FROM ProviderEvents"
+        ).get().count,
+        0
+    );
+    const diagnostics = await request(app)
+        .get("/api/admin/diagnostics/sandbox")
+        .set("authorization", "Development local-admin")
+        .expect(200);
+    assert.equal(diagnostics.body.sandboxDiagnostics.webhook.status, "ATTENTION");
+    assert.equal(diagnostics.body.sandboxDiagnostics.latestEvent.status, "REJECTED");
+    assert.equal(
+        diagnostics.body.sandboxDiagnostics.latestEvent.reasonCode,
+        "PAYMENT_WEBHOOK_STALE"
+    );
+    assert.ok(diagnostics.body.sandboxDiagnostics.webhook.lastReceivedAt);
+});
+
+test("signed live-mode Stripe events are rejected before ingestion", async t => {
+    const { app, eventEngine } = createPaymentTestApp(t);
+    const checkout = await createCheckout(app, "client-request-live-event");
+    const event = completionEvent(checkout, "live-event");
+    event.livemode = true;
+
+    const response = await postWebhook(app, event).expect(400);
+    assert.equal(response.body.error.code, "LIVE_PAYMENT_EVENT_REJECTED");
+    assert.equal(
+        eventEngine.eventStore.database.prepare(
+            "SELECT COUNT(*) AS count FROM ProviderEvents"
+        ).get().count,
+        0
+    );
+    const diagnostics = await request(app)
+        .get("/api/admin/diagnostics/sandbox")
+        .set("authorization", "Development local-admin")
+        .expect(200);
+    assert.equal(
+        diagnostics.body.sandboxDiagnostics.latestEvent.reasonCode,
+        "LIVE_PAYMENT_EVENT_REJECTED"
+    );
+});
+
+test("signed events outside the Phase 8A allow-list are rejected before ingestion", async t => {
+    const { app, eventEngine } = createPaymentTestApp(t);
+    const checkout = await createCheckout(app, "client-request-unlisted-event");
+    const event = completionEvent(checkout, "unlisted-event");
+    event.type = "customer.created";
+
+    const response = await postWebhook(app, event).expect(400);
+    assert.equal(response.body.error.code, "PAYMENT_EVENT_NOT_ALLOWED");
     assert.equal(
         eventEngine.eventStore.database.prepare(
             "SELECT COUNT(*) AS count FROM ProviderEvents"
@@ -351,6 +408,34 @@ test("refunds and disputes update payment status without directly touching hardw
     );
 });
 
+test("partial refunds retain completed payment status and never touch hardware", async t => {
+    const { app, eventEngine } = createPaymentTestApp(t);
+    const checkout = await createCheckout(app, "client-request-partial-refund");
+    const completion = completionEvent(checkout, "partial-refund");
+    await postWebhook(app, completion).expect(200);
+    const refundEvent = statusEvent(
+        "charge-refunded",
+        checkout,
+        "partial-refund"
+    );
+    refundEvent.data.object.payment_intent = completion.data.object.payment_intent;
+    refundEvent.data.object.refunded = false;
+    refundEvent.data.object.amount_refunded = 100;
+    await postWebhook(app, refundEvent).expect(200);
+
+    const payment = eventEngine.eventStore.getPaymentRequest(
+        checkout.paymentRequest.paymentRequestId
+    );
+    assert.equal(payment.status, "COMPLETED");
+    assert.equal(payment.providerStatus, "partially_refunded");
+    assert.equal(
+        eventEngine.eventStore.database.prepare(
+            "SELECT COUNT(*) AS count FROM DeviceCommands"
+        ).get().count,
+        0
+    );
+});
+
 test("successful payment remains visible when the Event Engine rejects feeding", async t => {
     const { app } = createPaymentTestApp(t, {
         config: { maxDailyFeeds: 1 }
@@ -430,6 +515,39 @@ test("administrator payment view links sandbox payment, ledger and queue records
     assert.ok(payment.contribution.contributionId);
     assert.ok(payment.feedIntent.feedIntentId);
     assert.ok(payment.event.eventId);
+});
+
+test("administrator sandbox diagnostics are read-only and secret-free", async t => {
+    const { app } = createPaymentTestApp(t);
+    const initial = await request(app)
+        .get("/api/admin/diagnostics/sandbox")
+        .set("authorization", "Development local-admin")
+        .expect(200);
+    assert.deepEqual(initial.body.sandboxDiagnostics, {
+        sandboxMode: "ENABLED",
+        apiStatus: "AVAILABLE",
+        stripeAdapterStatus: "CONFIGURED",
+        webhook: {
+            status: "READY",
+            lastReceivedAt: null
+        },
+        latestEvent: null
+    });
+
+    const checkout = await createCheckout(app, "client-request-diagnostics");
+    await postWebhook(app, completionEvent(checkout, "diagnostics")).expect(200);
+    const received = await request(app)
+        .get("/api/admin/diagnostics/sandbox")
+        .set("authorization", "Development local-admin")
+        .expect(200);
+    const diagnostics = received.body.sandboxDiagnostics;
+    assert.equal(diagnostics.webhook.status, "RECEIVING");
+    assert.equal(diagnostics.latestEvent.status, "ACCEPTED");
+    assert.equal(diagnostics.latestEvent.eventType, "checkout.session.completed");
+    assert.ok(diagnostics.webhook.lastReceivedAt);
+    const serialized = JSON.stringify(diagnostics);
+    assert.doesNotMatch(serialized, /sk_test_|whsec_|stripe-signature/i);
+    assert.doesNotMatch(serialized, /Sandbox Supporter|client-request-diagnostics/);
 });
 
 test("sandbox validation rejects client-controlled amount and production/live settings", async t => {
