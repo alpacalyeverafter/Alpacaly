@@ -50,6 +50,13 @@ export {
     readProviderCandidatePack
 } from "./provider-candidate-assessment.js";
 export { compareProviderCandidatePacks } from "./provider-candidate-comparison.js";
+export {
+    GOVERNANCE_REVIEW_DECISIONS,
+    GOVERNANCE_REVIEW_PACK_VERSION,
+    GOVERNANCE_REVIEW_SCOPE,
+    createGovernanceReviewPack,
+    governanceReviewPackDigest
+} from "./governance-review-pack.js";
 export { RecoverySafetyService } from "./recovery-safety-service.js";
 export { RestoredDataReconciler } from "./restored-data-reconciler.js";
 export {

@@ -165,3 +165,9 @@ That later authorization must be explicit and must still prohibit payments,
 public feeding, production MQTT, cameras and physical hardware. No provider
 should be selected or account created merely because this document review is
 complete.
+
+Phase 7F-2E implements that next review as a strict, non-ranking
+[governance review pack](phase-7f-2e-governance-review-pack.md). It carries the
+exact candidate digests, open questions, source freshness and proposed targets
+into five independent authority checklists while keeping staging and production
+authorization off.

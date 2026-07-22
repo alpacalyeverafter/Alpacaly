@@ -244,6 +244,16 @@ and production authorization off. It does not score or recommend a provider. See
 [Provider candidate assessments](docs/phase-7f-2d-provider-candidate-assessments.md)
 for the candidate sources, schema, command, safety boundary, and limitations.
 
+Phase 7F-2E adds an offline governance review pack for independent technical,
+security, operations, data-governance and finance review. It carries forward
+both immutable candidate-pack digests, all open questions, a non-ranking claim
+severity review, proposed RPO/RTO targets, evidence-storage and source-freshness
+reviews, strict separation of duties, and four explicit decision outcomes. The
+consolidated result remains `BLOCKED` unless all five authorities complete their
+checklists and record acceptable independent decisions; even a completed review
+does not select a provider or authorize staging or production. See
+[Governance review pack](docs/phase-7f-2e-governance-review-pack.md).
+
 ## Simulated controller and MQTT architecture
 
 The Device Command worker depends only on `DeviceTransport`. Phase 7E-2 keeps the
