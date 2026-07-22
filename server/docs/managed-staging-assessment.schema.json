@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpacaly.example/schemas/managed-staging-assessment-v1.json",
+  "title": "Alpacaly provider-neutral managed staging assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "assessmentVersion", "assessmentId", "collectedAt", "environment", "candidate",
+    "capabilities", "security", "roles", "pitr", "restoreDrill", "portability",
+    "operations", "governance", "collection"
+  ],
+  "properties": {
+    "assessmentVersion": { "const": 1 },
+    "assessmentId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "assessmentDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "environment": { "const": "staging" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerLabel", "serviceLabel", "region", "postgresVersion"],
+      "properties": {
+        "providerLabel": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "serviceLabel": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "region": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "postgresVersion": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "managedPostgres", "encryptedStorage", "encryptedBackups", "pitrAvailable",
+        "isolatedRestoreAvailable", "nativeExportAvailable", "monitoringAvailable"
+      ],
+      "properties": {
+        "managedPostgres": { "type": "boolean" },
+        "encryptedStorage": { "type": "boolean" },
+        "encryptedBackups": { "type": "boolean" },
+        "pitrAvailable": { "type": "boolean" },
+        "isolatedRestoreAvailable": { "type": "boolean" },
+        "nativeExportAvailable": { "type": "boolean" },
+        "monitoringAvailable": { "type": "boolean" }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tlsMinimum", "hostnameVerification", "privateNetworking", "publicAccessDisabled",
+        "secretManagerIntegration", "credentialRotation", "humanMfaRequired",
+        "administrativeAuditLogging"
+      ],
+      "properties": {
+        "tlsMinimum": { "enum": ["TLS_1_2", "TLS_1_3", "BELOW_TLS_1_2", "UNKNOWN"] },
+        "hostnameVerification": { "type": "boolean" },
+        "privateNetworking": { "type": "boolean" },
+        "publicAccessDisabled": { "type": "boolean" },
+        "secretManagerIntegration": { "type": "boolean" },
+        "credentialRotation": { "type": "boolean" },
+        "humanMfaRequired": { "type": "boolean" },
+        "administrativeAuditLogging": { "type": "boolean" }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationRoleSeparated", "migrationRoleSeparated", "backupRoleSeparated",
+        "restoreRoleSeparated", "monitoringRoleSeparated", "breakGlassControlled",
+        "evidenceReference"
+      ],
+      "properties": {
+        "applicationRoleSeparated": { "type": "boolean" },
+        "migrationRoleSeparated": { "type": "boolean" },
+        "backupRoleSeparated": { "type": "boolean" },
+        "restoreRoleSeparated": { "type": "boolean" },
+        "monitoringRoleSeparated": { "type": "boolean" },
+        "breakGlassControlled": { "type": "boolean" },
+        "evidenceReference": { "$ref": "#/$defs/safeReference" }
+      }
+    },
+    "pitr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planReference", "transactionBoundaryDefined", "walContinuityCheckPlanned",
+        "testStatus", "evidenceReference", "gapDetected", "measuredRpoSeconds",
+        "targetRpoSeconds"
+      ],
+      "properties": {
+        "planReference": { "$ref": "#/$defs/safeReference" },
+        "transactionBoundaryDefined": { "type": "boolean" },
+        "walContinuityCheckPlanned": { "type": "boolean" },
+        "testStatus": { "enum": ["NOT_RUN", "PASS", "FAILED"] },
+        "evidenceReference": {
+          "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }]
+        },
+        "gapDetected": { "type": "boolean" },
+        "measuredRpoSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "targetRpoSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "restoreDrill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reportReference", "status", "checksumVerified", "reconciliationStatus",
+        "workersRemainedBlocked", "uncertainCommandsRemainedBlocked",
+        "emergencyStopsPreserved", "measuredRestoreSeconds",
+        "measuredReconciliationSeconds", "measuredSupervisedReleaseSeconds",
+        "targetRtoSeconds"
+      ],
+      "properties": {
+        "reportReference": {
+          "anyOf": [{ "$ref": "#/$defs/safeReference" }, { "type": "null" }]
+        },
+        "status": { "enum": ["NOT_RUN", "PASS", "WARNING", "BLOCKED"] },
+        "checksumVerified": { "type": "boolean" },
+        "reconciliationStatus": { "enum": ["NOT_RUN", "PASS", "BLOCKED"] },
+        "workersRemainedBlocked": { "type": "boolean" },
+        "uncertainCommandsRemainedBlocked": { "type": "boolean" },
+        "emergencyStopsPreserved": { "type": "boolean" },
+        "measuredRestoreSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "measuredReconciliationSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "measuredSupervisedReleaseSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "targetRtoSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "portability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nativeDumpRestore", "exportTested", "extensionInventoryComplete",
+        "proprietaryDependencies", "exitPlanReference", "lockInRisk"
+      ],
+      "properties": {
+        "nativeDumpRestore": { "type": "boolean" },
+        "exportTested": { "type": "boolean" },
+        "extensionInventoryComplete": { "type": "boolean" },
+        "proprietaryDependencies": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/safeReference" }
+        },
+        "exitPlanReference": { "$ref": "#/$defs/safeReference" },
+        "lockInRisk": { "enum": ["LOW", "MEDIUM", "HIGH"] }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "costEvidenceReference", "currency", "monthlyEstimateMinor",
+        "supportEvidenceReference", "supportLevel", "supportResponseMinutes",
+        "serviceLimitsReviewed", "incidentHistoryReviewed", "monitoringPlanReviewed"
+      ],
+      "properties": {
+        "costEvidenceReference": { "$ref": "#/$defs/safeReference" },
+        "currency": { "enum": ["GBP", "EUR", "USD"] },
+        "monthlyEstimateMinor": { "type": "integer", "minimum": 0 },
+        "supportEvidenceReference": { "$ref": "#/$defs/safeReference" },
+        "supportLevel": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "supportResponseMinutes": { "type": "integer", "minimum": 1 },
+        "serviceLimitsReviewed": { "type": "boolean" },
+        "incidentHistoryReviewed": { "type": "boolean" },
+        "monitoringPlanReviewed": { "type": "boolean" }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ukRegionAvailable", "dataTransferReviewed", "privacyAssessmentReference",
+        "welfareReviewReference"
+      ],
+      "properties": {
+        "ukRegionAvailable": { "type": "boolean" },
+        "dataTransferReviewed": { "type": "boolean" },
+        "privacyAssessmentReference": { "$ref": "#/$defs/safeReference" },
+        "welfareReviewReference": { "$ref": "#/$defs/safeReference" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "collectorVersion"],
+      "properties": {
+        "source": { "enum": ["DOCUMENT_REVIEW", "CONTROL_PLANE_EXPORT", "RESTORE_DRILL", "COMBINED"] },
+        "collectorVersion": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    }
+  },
+  "$defs": {
+    "safeReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}
