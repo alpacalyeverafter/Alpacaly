@@ -58,6 +58,7 @@ test("creates the required persistent Event Store tables", t => {
         "DeviceCommandOutbox",
         "DeviceCommands",
         "Devices",
+        "DisasterRecoveryEvents",
         "DistributedWorkClaims",
         "EdgeControllerStatus",
         "EdgeControllerStatusHistory",
@@ -79,6 +80,8 @@ test("creates the required persistent Event Store tables", t => {
         "ProviderEvents",
         "Queue",
         "Queues",
+        "RecoverySafetyState",
+        "RestoredCommandReviews",
         "RoleAssignments",
         "SimulatedControllerCommandJournal",
         "SimulatedControllerFeederAssignments",
@@ -91,7 +94,7 @@ test("creates the required persistent Event Store tables", t => {
         "WorkClaimHistory",
         "WorkerInstances"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 11);
+    assert.equal(engine.eventStore.getSchemaVersion(), 12);
 
     engine.close();
 });

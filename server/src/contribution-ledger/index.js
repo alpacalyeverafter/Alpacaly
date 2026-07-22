@@ -20,6 +20,7 @@ export function createContributionLedgerServices({
     outboxRetryDelayMs
 }) {
     const claimStore = createDistributedClaimStore({ eventStore, config, clock });
+    const recoverySafetyService = eventEngine.recoverySafetyService;
     const workerIdentity = createWorkerIdentity({
         config,
         serviceType: "feed-intent-outbox",
@@ -56,6 +57,7 @@ export function createContributionLedgerServices({
         workerIdentity,
         heartbeatIntervalMs: config.workerHeartbeatIntervalMs,
         maximumAttempts: config.workerMaximumAttempts,
+        recoverySafetyService,
         ...(outboxPollIntervalMs === undefined
             ? {}
             : { pollIntervalMs: outboxPollIntervalMs }),
@@ -71,7 +73,7 @@ export function createContributionLedgerServices({
         ...(idGenerator ? { idGenerator } : {})
     });
 
-    if (startOutboxWorker) {
+    if (startOutboxWorker && recoverySafetyService.workersMayStart()) {
         outboxWorker.start();
     }
 

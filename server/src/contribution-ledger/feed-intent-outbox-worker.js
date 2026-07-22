@@ -11,7 +11,8 @@ export class FeedIntentOutboxWorker {
         pollIntervalMs = 250,
         retryDelayMs = 1000,
         heartbeatIntervalMs = 5000,
-        maximumAttempts = 10
+        maximumAttempts = 10,
+        recoverySafetyService = null
     }) {
         this.eventStore = eventStore;
         this.eventEngine = eventEngine;
@@ -25,6 +26,7 @@ export class FeedIntentOutboxWorker {
         this.retryDelayMs = retryDelayMs;
         this.heartbeatIntervalMs = heartbeatIntervalMs;
         this.maximumAttempts = maximumAttempts;
+        this.recoverySafetyService = recoverySafetyService;
         this.started = false;
         this.processing = false;
         this.timer = null;
@@ -34,7 +36,13 @@ export class FeedIntentOutboxWorker {
 
     start() {
         if (this.started) {
-            return;
+            return true;
+        }
+        if (this.recoverySafetyService && !this.recoverySafetyService.workersMayStart()) {
+            this.logger.warn({
+                event: "feed_intent_worker_recovery_blocked"
+            }, "FeedIntent worker remains disabled in recovery safety mode");
+            return false;
         }
 
         this.started = true;
@@ -43,6 +51,7 @@ export class FeedIntentOutboxWorker {
         this.reconcileAfterStartup();
         this.processPending();
         this.scheduleNextPoll();
+        return true;
     }
 
     stop() {
@@ -83,7 +92,12 @@ export class FeedIntentOutboxWorker {
     }
 
     processPending({ limit = 100 } = {}) {
-        if (this.processing || this.eventStore.closed) {
+        if (
+            this.processing
+            || this.eventStore.closed
+            || (this.recoverySafetyService
+                && !this.recoverySafetyService.workersMayStart())
+        ) {
             return [];
         }
 
@@ -131,6 +145,7 @@ export class FeedIntentOutboxWorker {
     }
 
     processFeedIntent(feedIntentId) {
+        this.recoverySafetyService?.assertOperationAllowed("FEED_INTENT_PROCESSING");
         this.ensureWorkerRegistered();
         let intent = this.eventStore.getFeedIntent(feedIntentId);
         if (!intent) {

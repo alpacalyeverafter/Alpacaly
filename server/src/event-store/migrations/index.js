@@ -22,8 +22,11 @@ import {
 import {
     migration011DistributedWorkerCoordination
 } from "./011-distributed-worker-coordination.js";
+import {
+    migration012DisasterRecoverySafety
+} from "./012-disaster-recovery-safety.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 11;
+export const EVENT_STORE_SCHEMA_VERSION = 12;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -36,7 +39,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration008SimulatedDeviceControllers,
     migration009SecureMqttTransport,
     migration010EdgeControllerVisibility,
-    migration011DistributedWorkerCoordination
+    migration011DistributedWorkerCoordination,
+    migration012DisasterRecoverySafety
 ]);
 
 function readUserVersion(database) {

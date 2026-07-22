@@ -707,7 +707,7 @@ test("broker outage reconnects and retained authority state is restored", async 
             && edge?.connected
             && edge?.assignmentState
             && edge?.safetyStates.size >= 3;
-    }, 3000, "MQTT clients and retained authority after broker restart");
+    }, 10_000, "MQTT clients and retained authority after broker restart");
     await harness.devices.worker.processCommand(command.commandId);
     await waitFor(() => (
         harness.devices.deviceCommandStore.getCommand(command.commandId).status

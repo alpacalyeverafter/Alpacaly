@@ -52,6 +52,20 @@ test("connection and lease bounds fail closed", () => {
     }, { loadEnvFile: false }), /at least the worker lease/);
 });
 
+test("recovery configuration rejects unsafe catalogue paths and parses worker blocking", () => {
+    assert.throws(() => loadConfig({
+        BACKUP_CATALOGUE_DIRECTORY: "relative/backups"
+    }, { loadEnvFile: false }), /must be an absolute path/);
+    const config = loadConfig({
+        RECOVERY_SAFETY_MODE: "true",
+        BACKUP_CATALOGUE_DIRECTORY: "/tmp/alpacaly-backup-catalogue"
+    }, { loadEnvFile: false });
+    assert.equal(config.recoverySafetyMode, true);
+    assert.equal(config.backupCatalogueDirectory, "/tmp/alpacaly-backup-catalogue");
+    assert.equal(config.backupRetentionDailyDays, 14);
+    assert.equal(config.restoreDrillMaximumAgeDays, 30);
+});
+
 test("SQLite remains the zero-setup non-production default", () => {
     const config = loadConfig({
         NODE_ENV: "development",

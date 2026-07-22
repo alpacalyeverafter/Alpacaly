@@ -19,6 +19,7 @@ export function createDeviceCommandServices({
     mqttConnect,
     startWorker = false
 }) {
+    const recoverySafetyService = eventEngine.recoverySafetyService;
     const claimStore = createDistributedClaimStore({ eventStore, config, clock });
     const workerIdentity = createWorkerIdentity({
         config,
@@ -36,6 +37,7 @@ export function createDeviceCommandServices({
         clock,
         logger,
         transport: deviceAdapter,
+        recoverySafetyService,
         ...(idGenerator ? { idGenerator } : {}),
         ...(adapterSleep ? { controllerSleep: adapterSleep } : {}),
         ...(mqttConnect ? { mqttConnect } : {})
@@ -71,6 +73,7 @@ export function createDeviceCommandServices({
         logger,
         clock,
         maximumAttempts: config.deviceCommandMaximumAttempts,
+        recoverySafetyService,
         ...(idGenerator ? { idGenerator } : {})
     });
     const worker = new DeviceCommandWorker({
@@ -86,6 +89,7 @@ export function createDeviceCommandServices({
         retryDelayMs: config.deviceCommandRetryDelayMs,
         claimHeartbeatIntervalMs: config.workerHeartbeatIntervalMs,
         maximumClaimAttempts: config.workerMaximumAttempts,
+        recoverySafetyService,
         ...(workerSleep ? { sleep: workerSleep } : {}),
         onOutcomeUnknown: command => {
             deviceCommandService.commandOutcomeUnknown(command);
@@ -95,7 +99,7 @@ export function createDeviceCommandServices({
     controllerServices.controllerService.setWorker(worker);
     eventEngine.setDeviceCommandService(deviceCommandService);
 
-    if (startWorker) {
+    if (startWorker && recoverySafetyService.workersMayStart()) {
         worker.start();
     }
 

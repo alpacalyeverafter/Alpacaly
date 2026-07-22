@@ -36,4 +36,9 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
-      - run: npm test
+      - name: Verify PostgreSQL native backup and restore tools
+        run: |
+          pg_dump --version
+          pg_restore --version
+      - name: Run full suite, PostgreSQL integration and disposable restore drill
+        run: npm test

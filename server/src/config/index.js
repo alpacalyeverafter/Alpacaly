@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 import { DEFAULTS } from "./defaults.js";
 
@@ -73,6 +73,17 @@ function optionalString(value) {
     const normalized = value === undefined || value === null
         ? "" : String(value).trim();
     return normalized || null;
+}
+
+function optionalAbsolutePath(value, name) {
+    const normalized = optionalString(value);
+    if (!normalized) {
+        return null;
+    }
+    if (!isAbsolute(normalized)) {
+        throw new Error(`${name} must be an absolute path.`);
+    }
+    return resolve(normalized);
 }
 
 function parsePostgresUrl(value, { production }) {
@@ -377,6 +388,45 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
         postgresApplicationName: String(
             env.POSTGRES_APPLICATION_NAME || DEFAULTS.postgresApplicationName
         ).trim(),
+        recoverySafetyMode: parseBoolean(
+            env.RECOVERY_SAFETY_MODE,
+            DEFAULTS.recoverySafetyMode,
+            "RECOVERY_SAFETY_MODE"
+        ),
+        backupCatalogueDirectory: optionalAbsolutePath(
+            env.BACKUP_CATALOGUE_DIRECTORY,
+            "BACKUP_CATALOGUE_DIRECTORY"
+        ),
+        backupRetentionDailyDays: parseInteger(
+            env.BACKUP_RETENTION_DAILY_DAYS,
+            DEFAULTS.backupRetentionDailyDays,
+            "BACKUP_RETENTION_DAILY_DAYS"
+        ),
+        backupRetentionWeeklyWeeks: parseInteger(
+            env.BACKUP_RETENTION_WEEKLY_WEEKS,
+            DEFAULTS.backupRetentionWeeklyWeeks,
+            "BACKUP_RETENTION_WEEKLY_WEEKS"
+        ),
+        backupRetentionMonthlyMonths: parseInteger(
+            env.BACKUP_RETENTION_MONTHLY_MONTHS,
+            DEFAULTS.backupRetentionMonthlyMonths,
+            "BACKUP_RETENTION_MONTHLY_MONTHS"
+        ),
+        backupMinimumRetentionDays: parseInteger(
+            env.BACKUP_MINIMUM_RETENTION_DAYS,
+            DEFAULTS.backupMinimumRetentionDays,
+            "BACKUP_MINIMUM_RETENTION_DAYS"
+        ),
+        backupMaximumAgeHours: parseInteger(
+            env.BACKUP_MAXIMUM_AGE_HOURS,
+            DEFAULTS.backupMaximumAgeHours,
+            "BACKUP_MAXIMUM_AGE_HOURS"
+        ),
+        restoreDrillMaximumAgeDays: parseInteger(
+            env.RESTORE_DRILL_MAXIMUM_AGE_DAYS,
+            DEFAULTS.restoreDrillMaximumAgeDays,
+            "RESTORE_DRILL_MAXIMUM_AGE_DAYS"
+        ),
         workerId: optionalString(env.WORKER_ID),
         workerInstanceId: optionalString(env.WORKER_INSTANCE_ID),
         workerSoftwareVersion: String(env.SOFTWARE_VERSION || "1.0.0").trim(),

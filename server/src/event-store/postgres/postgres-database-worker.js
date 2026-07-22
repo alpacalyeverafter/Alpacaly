@@ -47,7 +47,9 @@ function rememberIdentifiers(source) {
     const text = Array.isArray(source) ? source.join("\n") : String(source || "");
     for (const match of text.matchAll(/\b[A-Za-z][A-Za-z0-9_]*\b/g)) {
         const value = match[0];
-        if (/[A-Z]/.test(value)) {
+        // Preserve application camelCase identifiers without treating SQL
+        // keywords and function names such as COUNT as result-column names.
+        if (/[A-Z]/.test(value) && /[a-z]/.test(value)) {
             identifiers.set(value.toLowerCase(), value);
         }
     }
@@ -95,7 +97,15 @@ function translateSql(source) {
                     output = output.slice(0, nullable.index) + "IS NOT DISTINCT FROM ";
                 }
             }
-            output += `$${parameter}`;
+            const nullPredicate = /^\s+IS\s+(?:NOT\s+)?NULL\b/i.test(
+                sql.slice(index + 1)
+            );
+            // PostgreSQL cannot infer the type of a null parameter used only by
+            // an IS NULL predicate. The cast preserves nullness and is confined
+            // to this PostgreSQL compatibility path.
+            output += nullPredicate
+                ? `CAST($${parameter} AS TEXT)`
+                : `$${parameter}`;
             continue;
         }
         output += character;
