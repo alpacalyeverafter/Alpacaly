@@ -154,3 +154,8 @@ redacted candidate assessment packs from published documentation only. Do not
 open an account or enter credentials until the schema, gate severity, approval
 authorities, proposed RPO/RTO, evidence storage, and identity-backed sign-off
 adapter have been approved.
+
+Phase 7F-2D implements only the published-document pack and offline comparison
+part of this recommendation. Its scope and limitations are documented in
+[Provider candidate assessments](phase-7f-2d-provider-candidate-assessments.md);
+it does not satisfy or bypass any Phase 7F-2C staging gate.

@@ -12,6 +12,12 @@ is now defined in
 [Phase 7F-2C managed staging evaluation](phase-7f-2c-managed-staging-evaluation.md).
 It does not replace the provider validation evidence below.
 
+The first published-document candidate packs and their deliberately non-ranking,
+non-authorizing comparison are documented in
+[Phase 7F-2D provider candidate assessments](phase-7f-2d-provider-candidate-assessments.md).
+Those packs do not select a provider or authorize an account, credentials,
+provisioning, a database connection, staging use, or production use.
+
 Phase 7F-2B1 does not select or purchase a managed provider. The later staging
 phase must evaluate and record the following before any production claim.
 

@@ -1,0 +1,312 @@
+{
+  "packVersion": 1,
+  "packId": "aws-rds-postgresql-london-2026-07-22",
+  "packDigest": "62f5477bfd25d0e59dbbd046cea7d7f917924d598ebf690dbbab76e1bf8be841",
+  "reviewedAt": "2026-07-22T10:30:00.000Z",
+  "scope": "PUBLISHED_DOCUMENT_REVIEW_ONLY",
+  "candidate": {
+    "providerLabel": "Amazon Web Services",
+    "serviceLabel": "Amazon RDS for PostgreSQL",
+    "regionLabel": "Europe (London)",
+    "regionCode": "eu-west-2",
+    "postgresqlMajorVersion": 16,
+    "officialDocumentationDomains": ["docs.aws.amazon.com", "aws.amazon.com"]
+  },
+  "sources": [
+    {
+      "sourceId": "aws-rds-postgresql",
+      "publisher": "Amazon Web Services",
+      "title": "Amazon RDS for PostgreSQL",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html",
+      "accessedAt": "2026-07-22T08:00:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-regions",
+      "publisher": "Amazon Web Services",
+      "title": "Regions, Availability Zones, and Local Zones",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.RegionsAndAvailabilityZones.html",
+      "accessedAt": "2026-07-22T08:05:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-encryption",
+      "publisher": "Amazon Web Services",
+      "title": "Encrypting Amazon RDS resources",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html",
+      "accessedAt": "2026-07-22T08:10:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-tls",
+      "publisher": "Amazon Web Services",
+      "title": "Using SSL with a PostgreSQL DB instance",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html",
+      "accessedAt": "2026-07-22T08:15:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-vpc",
+      "publisher": "Amazon Web Services",
+      "title": "Amazon VPC and Amazon RDS",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.html",
+      "accessedAt": "2026-07-22T08:20:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-backup-restore",
+      "publisher": "Amazon Web Services",
+      "title": "Backing up and restoring your Amazon RDS DB instance",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/gettingstartedguide/managing-backup-restore.html",
+      "accessedAt": "2026-07-22T08:25:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-snapshot-restore",
+      "publisher": "Amazon Web Services",
+      "title": "Restoring to a DB instance",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_RestoreFromSnapshot.html",
+      "accessedAt": "2026-07-22T08:30:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-monitoring",
+      "publisher": "Amazon Web Services",
+      "title": "Monitoring tools for Amazon RDS",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/MonitoringOverview.html",
+      "accessedAt": "2026-07-22T08:35:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-native-tools",
+      "publisher": "Amazon Web Services",
+      "title": "Importing data into PostgreSQL on Amazon RDS",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Procedural.Importing.html",
+      "accessedAt": "2026-07-22T08:40:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-rds-pricing",
+      "publisher": "Amazon Web Services",
+      "title": "Amazon RDS pricing",
+      "url": "https://aws.amazon.com/rds/pricing/",
+      "accessedAt": "2026-07-22T08:45:00.000Z",
+      "documentDate": null
+    },
+    {
+      "sourceId": "aws-support-plans",
+      "publisher": "Amazon Web Services",
+      "title": "AWS Support plans",
+      "url": "https://aws.amazon.com/premiumsupport/plans/",
+      "accessedAt": "2026-07-22T08:50:00.000Z",
+      "documentDate": null
+    }
+  ],
+  "claims": [
+    {
+      "controlId": "managed-postgresql",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents RDS as a managed service that supports PostgreSQL database instances.",
+      "sourceIds": ["aws-rds-postgresql"],
+      "nextVerification": "TECHNICAL_REVIEW",
+      "limitations": ["No service instance or control-plane configuration was inspected."]
+    },
+    {
+      "controlId": "postgresql-16-or-newer",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documentation describes RDS for PostgreSQL 16 capabilities, including TLS configuration for version 16 and later.",
+      "sourceIds": ["aws-rds-tls"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["The exact engine minor version and London instance-class availability were not queried."]
+    },
+    {
+      "controlId": "uk-region",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "The RDS region table lists Europe (London) as eu-west-2.",
+      "sourceIds": ["aws-rds-regions"],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["Region availability alone does not settle backup location or international transfer obligations."]
+    },
+    {
+      "controlId": "encrypted-storage",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents encryption at rest for RDS instance storage using AWS KMS keys.",
+      "sourceIds": ["aws-rds-encryption"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No key policy, rotation configuration or encrypted instance was inspected."]
+    },
+    {
+      "controlId": "encrypted-backups",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents that backups and snapshots of an encrypted RDS instance are encrypted.",
+      "sourceIds": ["aws-rds-encryption"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["No provider backup metadata or restored encrypted target was inspected."]
+    },
+    {
+      "controlId": "point-in-time-recovery",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents point-in-time restore within the configured automated-backup retention period.",
+      "sourceIds": ["aws-rds-backup-restore"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["No transaction-boundary RPO or WAL continuity was measured."]
+    },
+    {
+      "controlId": "isolated-restore",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents snapshot and point-in-time restore into a newly named DB instance rather than overwriting the source.",
+      "sourceIds": ["aws-rds-snapshot-restore", "aws-rds-backup-restore"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["Alpacaly target-isolation and empty-target checks were not exercised against RDS."]
+    },
+    {
+      "controlId": "tls-and-hostname-verification",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents SSL/TLS, CA validation and verify-full hostname verification for RDS PostgreSQL.",
+      "sourceIds": ["aws-rds-tls"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No certificate chain, forced-TLS parameter group or client verify-full connection was inspected."]
+    },
+    {
+      "controlId": "private-networking",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents RDS DB instances inside an Amazon VPC with network controls.",
+      "sourceIds": ["aws-rds-postgresql", "aws-rds-vpc"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["Public accessibility, routing and security-group rules were not configured or tested."]
+    },
+    {
+      "controlId": "native-dump-and-restore",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents native PostgreSQL pg_dump and pg_restore migration tooling for RDS PostgreSQL.",
+      "sourceIds": ["aws-rds-native-tools"],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["Alpacaly extensions, roles, triggers and full export portability were not tested."]
+    },
+    {
+      "controlId": "monitoring-and-alerting",
+      "status": "SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS publishes RDS monitoring integrations and operational metrics.",
+      "sourceIds": ["aws-rds-monitoring"],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["No Alpacaly alert route, threshold, delivery or on-call response was configured."]
+    },
+    {
+      "controlId": "least-privilege-role-separation",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "Published RDS material establishes managed service and VPC boundaries, but this review did not prove Alpacaly's separate application, migration, backup, restore and monitoring roles.",
+      "sourceIds": ["aws-rds-postgresql", "aws-rds-vpc"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No IAM policy, database role, break-glass control or role assumption audit was inspected."]
+    },
+    {
+      "controlId": "secret-management-and-rotation",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "This candidate review did not establish the exact Alpacaly secret-storage and rotation design.",
+      "sourceIds": [],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["General AWS secret-management services were outside this RDS candidate evidence review."]
+    },
+    {
+      "controlId": "administrative-audit-logging",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS publishes monitoring capabilities, but this review did not prove complete immutable administrative audit coverage for the proposed design.",
+      "sourceIds": ["aws-rds-monitoring"],
+      "nextVerification": "SECURITY_REVIEW",
+      "limitations": ["No control-plane audit trail, retention rule or identity-backed reviewer evidence was inspected."]
+    },
+    {
+      "controlId": "backup-retention-and-deletion",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents automated-backup retention and persistent manual snapshots.",
+      "sourceIds": ["aws-rds-backup-restore"],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["Required daily, weekly, monthly, minimum-retention and deletion-evidence policy was not configured."]
+    },
+    {
+      "controlId": "legal-and-incident-hold",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "The reviewed RDS documents did not establish an approved legal or incident hold workflow for Alpacaly backups.",
+      "sourceIds": [],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["The existing Alpacaly hold registry still requires an approved provider-side operating procedure."]
+    },
+    {
+      "controlId": "service-limits",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "This review did not record the applicable London quotas, connection limits, storage bounds or restore constraints for the proposed size.",
+      "sourceIds": [],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["Instance-class and account quota information can vary and requires a later controlled review."]
+    },
+    {
+      "controlId": "incident-history",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "No decision-grade incident-history review was completed for this candidate.",
+      "sourceIds": [],
+      "nextVerification": "OPERATIONS_REVIEW",
+      "limitations": ["A public status view is not equivalent to contractual or candidate-specific incident evidence."]
+    },
+    {
+      "controlId": "support-response",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS publishes support-plan descriptions, but no plan was selected and no response commitment was accepted.",
+      "sourceIds": ["aws-support-plans"],
+      "nextVerification": "CONTRACT_REVIEW",
+      "limitations": ["Entitlement, response target, escalation route and cost require independent contractual review."]
+    },
+    {
+      "controlId": "cost-evidence",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS publishes variable RDS pricing components, but this review does not contain an approved London architecture or monthly quote.",
+      "sourceIds": ["aws-rds-pricing"],
+      "nextVerification": "FINANCE_REVIEW",
+      "limitations": ["Compute, storage, I/O, backup, transfer, monitoring, support and tax assumptions remain unpriced."]
+    },
+    {
+      "controlId": "uk-data-transfer-review",
+      "status": "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION",
+      "summary": "AWS documents an isolated Europe (London) region, but this is not a completed UK data-transfer or privacy assessment.",
+      "sourceIds": ["aws-rds-regions"],
+      "nextVerification": "DATA_GOVERNANCE_REVIEW",
+      "limitations": ["Backup locations, support access, telemetry, subprocessors and contractual transfers remain unreviewed."]
+    },
+    {
+      "controlId": "alpacaly-restore-safety-drill",
+      "status": "NOT_FOUND_IN_REVIEWED_DOCUMENTATION",
+      "summary": "Published AWS documentation cannot prove Alpacaly recovery-safety mode, claim fencing, emergency-stop preservation or OUTCOME_UNKNOWN handling.",
+      "sourceIds": [],
+      "nextVerification": "STAGING_TEST",
+      "limitations": ["A disposable provider-backed restore drill is mandatory before any later staging evaluation can pass."]
+    }
+  ],
+  "commercial": {
+    "pricingReview": "PUBLISHED_VARIABLES_ONLY",
+    "supportReview": "PUBLISHED_PLANS_ONLY",
+    "quoteRequired": true,
+    "contractReviewRequired": true
+  },
+  "openQuestions": [
+    "Which London deployment shape meets the proposed RPO and RTO without relying on untested assumptions?",
+    "How will separate application, migration, backup, restore and monitoring roles be enforced and audited?",
+    "What backup, PITR and telemetry data can leave the UK region under normal operations or support access?",
+    "What support tier, escalation route and response commitment would be contractually available?",
+    "What are the full monthly costs for HA, backups, PITR, monitoring, transfer, support and restore drills?",
+    "How will legal holds and deletion evidence be applied without weakening the existing append-only catalogue?"
+  ],
+  "collection": {
+    "method": "PUBLISHED_DOCUMENTATION_ONLY",
+    "reviewerReference": "phase-7f2d-doc-review"
+  },
+  "declarations": {
+    "accountsCreated": false,
+    "credentialsUsed": false,
+    "providerApiCallsMade": false,
+    "databasesConnected": false,
+    "resourcesProvisioned": false,
+    "providerSelected": false,
+    "stagingAuthorized": false,
+    "productionAuthorized": false,
+    "externalConnectionsAuthorized": false
+  }
+}

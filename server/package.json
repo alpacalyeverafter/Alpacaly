@@ -18,6 +18,7 @@
     "backup:postgres": "node scripts/postgres-backup.js",
     "check:managed-backups": "node scripts/managed-backup-check.js",
     "evaluate:managed-staging": "node scripts/managed-staging-evaluate.js",
+    "assess:provider-candidates": "node scripts/provider-candidates-assess.js",
     "hold:postgres-backup": "node scripts/postgres-backup-hold.js",
     "restore:postgres": "node scripts/postgres-restore.js",
     "reconcile:postgres-restore": "node scripts/postgres-reconcile-restore.js",
