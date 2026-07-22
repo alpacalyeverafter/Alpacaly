@@ -13,6 +13,7 @@ import {
     resolveBackupArtifactPath,
     writeBackupManifest
 } from "./backup-manifest.js";
+import { BackupHoldRegistry } from "./backup-hold-registry.js";
 import { isBackupExpired } from "./retention-policy.js";
 
 export class BackupCatalogue {
@@ -103,7 +104,17 @@ export class BackupCatalogue {
     }
 
     identifyExpired(now = this.clock()) {
-        return this.list().filter(item => isBackupExpired(item.manifest, now));
+        const holds = new BackupHoldRegistry({
+            directory: this.directory,
+            clock: this.clock
+        });
+        const heldBackupIds = new Set(
+            holds.activeHolds().map(event => event.backupId)
+        );
+        return this.list().filter(item => (
+            !heldBackupIds.has(item.manifest.backupId)
+            && isBackupExpired(item.manifest, now)
+        ));
     }
 
     recordRestoreTest(manifestPath, {
@@ -161,24 +172,55 @@ export class BackupCatalogue {
         return deleted;
     }
 
-    getDiagnostics({ maximumBackupAgeHours = 24, restoreDrillMaximumAgeDays = 30 } = {}) {
-        const entries = this.list();
-        const latestOperation = this.operationRecords()[0] || null;
-        const latestRestoreReport = this.restoreReports()[0] || null;
+    getDiagnostics({
+        maximumBackupAgeHours = 24,
+        restoreDrillMaximumAgeDays = 30,
+        environment = null
+    } = {}) {
+        const entries = this.list().filter(item => (
+            !environment || item.manifest.environment === environment
+        ));
+        const backupIds = new Set(entries.map(item => item.manifest.backupId));
+        const latestOperation = this.operationRecords().find(record => (
+            !environment || record.environment === environment
+        )) || null;
+        const restoreReports = this.restoreReports();
+        const latestRestoreReport = restoreReports.find(report => (
+            !environment || backupIds.has(report.backupId)
+        )) || null;
         const latest = entries[0]?.manifest || null;
         const successfulRestore = entries
-            .map(item => item.manifest)
-            .filter(manifest => manifest.restoreTest.mostRecentSuccessfulAt)
+            .map(item => {
+                const manifest = item.manifest;
+                if (
+                    !manifest.restoreTest.mostRecentSuccessfulAt
+                    || !["PASS", "WARNING"].includes(manifest.restoreTest.status)
+                ) {
+                    return null;
+                }
+                const report = restoreReports.find(candidate => (
+                    candidate.reportId === manifest.restoreTest.reportId
+                    && candidate.backupId === manifest.backupId
+                    && ["PASS", "WARNING"].includes(candidate.status)
+                    && ["test", "staging"].includes(candidate.targetEnvironment)
+                    && candidate.workersStarted === false
+                    && candidate.feedingStarted === false
+                    && candidate.completedAt
+                    && Number.isFinite(Date.parse(candidate.completedAt))
+                ));
+                return report ? { manifest, report } : null;
+            })
+            .filter(Boolean)
             .sort((left, right) => Date.parse(
-                right.restoreTest.mostRecentSuccessfulAt
-            ) - Date.parse(left.restoreTest.mostRecentSuccessfulAt))[0] || null;
+                right.report.completedAt
+            ) - Date.parse(left.report.completedAt))[0] || null;
         const now = this.clock().getTime();
         const backupAgeSeconds = latest
             ? Math.max(0, Math.floor((now - Date.parse(latest.createdAt)) / 1000))
             : null;
         const restoreAgeSeconds = successfulRestore
             ? Math.max(0, Math.floor((
-                now - Date.parse(successfulRestore.restoreTest.mostRecentSuccessfulAt)
+                now - Date.parse(successfulRestore.report.completedAt)
             ) / 1000))
             : null;
         return {
@@ -199,9 +241,10 @@ export class BackupCatalogue {
                 restoreTestStatus: latest.restoreTest.status
             } : null,
             latestSuccessfulRestoreTest: successfulRestore ? {
-                backupId: successfulRestore.backupId,
-                testedAt: successfulRestore.restoreTest.mostRecentSuccessfulAt,
-                ageSeconds: restoreAgeSeconds
+                backupId: successfulRestore.manifest.backupId,
+                testedAt: successfulRestore.report.completedAt,
+                ageSeconds: restoreAgeSeconds,
+                reportId: successfulRestore.report.reportId
             } : null,
             latestRestoreTestResult: latestRestoreReport ? {
                 reportId: latestRestoreReport.reportId,
@@ -216,7 +259,11 @@ export class BackupCatalogue {
                 || backupAgeSeconds > maximumBackupAgeHours * 60 * 60,
             restoreDrillOverdue: restoreAgeSeconds === null
                 || restoreAgeSeconds > restoreDrillMaximumAgeDays * 24 * 60 * 60,
-            expiredBackupCount: this.identifyExpired().length
+            expiredBackupCount: this.identifyExpired().length,
+            activeHoldCount: new BackupHoldRegistry({
+                directory: this.directory,
+                clock: this.clock
+            }).activeHolds().length
         };
     }
 }

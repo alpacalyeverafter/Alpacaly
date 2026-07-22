@@ -1,8 +1,8 @@
 # Alpacaly Event Engine Server
 
-This directory contains the Phase 7F backend, PostgreSQL recovery tooling, and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
+This directory contains the Phase 7F backend, PostgreSQL recovery and managed-backup operations tooling, and simulated Barn edge-controller foundation for Alpacaly Ever After. It is a Node.js 24 and Express service in which verified Contributions create durable FeedIntents before feed requests can enter the Event Engine. PostgreSQL is the required central production source of truth; SQLite remains the zero-setup development/test store and the independent Barn edge-controller journal. The Event Engine applies welfare and operator-safety rules, runs resource-isolated feeder queues, and requests durable simulated device actions through a configuration-selected hardware-neutral transport.
 
-## Phase 7F-2A boundaries
+## Phase 7F implemented boundaries
 
 Included:
 
@@ -94,6 +94,8 @@ Included:
 - Isolated restore, domain reconciliation, restored-claim fencing, and persistent recovery safety mode
 - Individually locked restored Device Commands and explicit supervised worker release
 - Provider-neutral backup catalogue, retention calculations, diagnostics, and CI restore drill
+- Allow-listed, checksummed managed-provider backup/PITR evidence and fail-closed operational checks
+- Append-only incident/legal backup holds that protect retention calculations
 
 Intentionally excluded:
 
@@ -104,6 +106,7 @@ Intentionally excluded:
 - Production broker hosting, certificates, certificate authority, or device enrolment
 - Camera integration or streaming
 - Live-video integration
+- A real managed PostgreSQL account, provider exporter, provider credentials, or provider-native alert routing
 
 PostgreSQL is the central production source of truth; SQLite provides the same central contract for local development and tests. ProviderEvent ingestion, Contribution verification, FeedIntent authorisation, Feed Request creation, lifecycle coordination, Device Command creation, delivery, and acknowledgement handling remain separate responsibilities. Durable claims and database constraints make crash recovery and cross-process ownership explicit. The detailed production contract, configuration, migration procedure, diagnostics, testing, contention baseline, and rollout guidance are in [`docs/postgresql-persistence.md`](docs/postgresql-persistence.md).
 
@@ -152,6 +155,14 @@ The default server address is `http://localhost:3000`.
 | `BACKUP_MINIMUM_RETENTION_DAYS` | `7` | Minimum retention floor unless a longer cadence applies. |
 | `BACKUP_MAXIMUM_AGE_HOURS` | `24` | Readiness diagnostic threshold for backup age. |
 | `RESTORE_DRILL_MAXIMUM_AGE_DAYS` | `30` | Diagnostic threshold for overdue restore testing. |
+| `MANAGED_BACKUP_OPERATIONS_ENABLED` | `false` | Enables protected managed-provider evidence diagnostics. Requires an external evidence directory. |
+| `MANAGED_BACKUP_EVIDENCE_DIRECTORY` | unset | Absolute append-only managed-operation evidence directory; provider credentials and raw responses are prohibited. |
+| `MANAGED_BACKUP_EXPECTED_ENVIRONMENT` | staging outside staging/production | Environment that imported provider evidence must match. |
+| `MANAGED_BACKUP_EXPECTED_DATABASE_IDENTITY` | unset | Required sanitized `sha256:...` identity of the monitored database. |
+| `MANAGED_BACKUP_EXPECTED_REGION` | unset | Required deployment-approved provider region label. |
+| `MANAGED_BACKUP_MAXIMUM_EVIDENCE_AGE_MINUTES` | `30` | Maximum provider evidence collection age before operations block. |
+| `MANAGED_BACKUP_RPO_MINUTES` | `15` | Proposed latest PITR/WAL age threshold; not an approved RPO. |
+| `MANAGED_BACKUP_MINIMUM_RETENTION_DAYS` | `14` | Minimum provider-reported backup retention checked by managed operations. |
 | `WORKER_LEASE_DURATION_MS`, `WORKER_HEARTBEAT_INTERVAL_MS` | `30000`, `5000` | Distributed ownership lease and renewal cadence. |
 | `WORKER_MAXIMUM_CLAIM_DURATION_MS` | `300000` | Hard non-extendable ownership duration. |
 | `WORKER_MAXIMUM_ATTEMPTS` | `10` | Bound before safe work enters dead-letter state. |
@@ -218,6 +229,8 @@ npm run restore:postgres -- \
 ```
 
 Restore never starts writers or workers. After checksum validation, restore, claim fencing, command classification, and reconciliation, safe work and workers require separate recorded decisions through `npm run release:postgres-recovery`. A successful backup command records an artifact; it does not prove recoverability. See [PostgreSQL backup and restore](docs/postgresql-backup-restore.md), the [disaster-recovery runbook](docs/disaster-recovery-runbook.md), and the [managed PostgreSQL handoff](docs/managed-postgresql-handoff.md).
+
+Phase 7F-2B2 also accepts secret-free evidence from a deployment-owned managed-provider exporter and exits non-zero on stale backups, PITR/WAL gaps, proposed-RPO regression, missing access controls, or overdue restore drills. Incident/legal holds are explicit append-only operations and never delete a backup. See [Managed backup operations](docs/phase-7f-2b2-managed-backup-operations.md) for the evidence schema, scheduler contract, commands, alerts, holds, and managed-staging acceptance evidence.
 
 ## Simulated controller and MQTT architecture
 

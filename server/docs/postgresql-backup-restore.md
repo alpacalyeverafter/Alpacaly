@@ -261,6 +261,13 @@ npm run cleanup:test-backups -- \
 It refuses staging/production manifests and writes deletion audit evidence. No
 production deletion is scheduled or automatic in this phase.
 
+Phase 7F-2B2 adds append-only incident/legal hold events. An active registry hold
+removes its backup from expiry and deletion calculations without rewriting the
+manifest or payload; releasing a hold requires a new recorded decision and never
+deletes the backup. Managed-provider backup/PITR evidence and hold commands are
+documented in
+[managed backup operations](phase-7f-2b2-managed-backup-operations.md).
+
 ## Encryption boundary
 
 No custom cryptography is implemented. Encryption must be supplied by one or

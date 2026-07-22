@@ -427,6 +427,42 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             DEFAULTS.restoreDrillMaximumAgeDays,
             "RESTORE_DRILL_MAXIMUM_AGE_DAYS"
         ),
+        managedBackupOperationsEnabled: parseBoolean(
+            env.MANAGED_BACKUP_OPERATIONS_ENABLED,
+            DEFAULTS.managedBackupOperationsEnabled,
+            "MANAGED_BACKUP_OPERATIONS_ENABLED"
+        ),
+        managedBackupEvidenceDirectory: optionalAbsolutePath(
+            env.MANAGED_BACKUP_EVIDENCE_DIRECTORY,
+            "MANAGED_BACKUP_EVIDENCE_DIRECTORY"
+        ),
+        managedBackupExpectedEnvironment: parseChoice(
+            env.MANAGED_BACKUP_EXPECTED_ENVIRONMENT,
+            ["staging", "production"].includes(nodeEnv) ? nodeEnv : "staging",
+            "MANAGED_BACKUP_EXPECTED_ENVIRONMENT",
+            ["staging", "production"]
+        ),
+        managedBackupExpectedDatabaseIdentity: optionalString(
+            env.MANAGED_BACKUP_EXPECTED_DATABASE_IDENTITY
+        ),
+        managedBackupExpectedRegion: optionalString(
+            env.MANAGED_BACKUP_EXPECTED_REGION
+        ),
+        managedBackupMaximumEvidenceAgeMinutes: parseInteger(
+            env.MANAGED_BACKUP_MAXIMUM_EVIDENCE_AGE_MINUTES,
+            DEFAULTS.managedBackupMaximumEvidenceAgeMinutes,
+            "MANAGED_BACKUP_MAXIMUM_EVIDENCE_AGE_MINUTES"
+        ),
+        managedBackupRecoveryPointObjectiveMinutes: parseInteger(
+            env.MANAGED_BACKUP_RPO_MINUTES,
+            DEFAULTS.managedBackupRecoveryPointObjectiveMinutes,
+            "MANAGED_BACKUP_RPO_MINUTES"
+        ),
+        managedBackupMinimumRetentionDays: parseInteger(
+            env.MANAGED_BACKUP_MINIMUM_RETENTION_DAYS,
+            DEFAULTS.managedBackupMinimumRetentionDays,
+            "MANAGED_BACKUP_MINIMUM_RETENTION_DAYS"
+        ),
         workerId: optionalString(env.WORKER_ID),
         workerInstanceId: optionalString(env.WORKER_INSTANCE_ID),
         workerSoftwareVersion: String(env.SOFTWARE_VERSION || "1.0.0").trim(),
@@ -603,6 +639,28 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     }
     if (!config.postgresApplicationName) {
         throw new Error("POSTGRES_APPLICATION_NAME must not be empty.");
+    }
+    if (
+        config.managedBackupOperationsEnabled
+        && !config.managedBackupEvidenceDirectory
+    ) {
+        throw new Error(
+            "MANAGED_BACKUP_EVIDENCE_DIRECTORY is required when managed backup operations are enabled."
+        );
+    }
+    if (config.managedBackupOperationsEnabled) {
+        if (!/^sha256:[a-f0-9]{64}$/.test(
+            config.managedBackupExpectedDatabaseIdentity || ""
+        )) {
+            throw new Error(
+                "MANAGED_BACKUP_EXPECTED_DATABASE_IDENTITY must be a sanitized SHA-256 identity when managed backup operations are enabled."
+            );
+        }
+        if (!config.managedBackupExpectedRegion) {
+            throw new Error(
+                "MANAGED_BACKUP_EXPECTED_REGION is required when managed backup operations are enabled."
+            );
+        }
     }
 
     return config;

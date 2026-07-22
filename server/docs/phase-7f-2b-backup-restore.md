@@ -23,3 +23,8 @@ replaced by the central restore.
 
 No backup payload, database credential, encryption key, payment credential, or
 physical-device secret is stored in the application database or repository.
+
+The provider-neutral operational successor is documented in
+[Phase 7F-2B2 managed backup operations](phase-7f-2b2-managed-backup-operations.md).
+It adds safe provider-evidence import, backup/PITR checks, and append-only holds;
+it does not change this phase's restore safety boundary.

@@ -1,5 +1,12 @@
 # Managed PostgreSQL staging handoff
 
+Phase 7F-2B2 now provides the provider-neutral evidence, monitoring, and hold
+contract described in
+[managed backup operations](phase-7f-2b2-managed-backup-operations.md). A real
+provider exporter, staging account, alert route, measured drills, and governance
+approval are still outstanding, so the requirements below remain the handoff for
+the managed-staging evaluation rather than a completed provider selection.
+
 Phase 7F-2B1 does not select or purchase a managed provider. The later staging
 phase must evaluate and record the following before any production claim.
 
