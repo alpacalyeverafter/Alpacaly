@@ -18,6 +18,13 @@ non-authorizing comparison are documented in
 Those packs do not select a provider or authorize an account, credentials,
 provisioning, a database connection, staging use, or production use.
 
+The independent five-owner review boundary is defined in the
+[Phase 7F-2E governance review pack](phase-7f-2e-governance-review-pack.md).
+Its consolidated outcome remains `BLOCKED` until technical, security,
+operations, data-governance and finance authorities complete separate acceptable
+decisions. Review completion still does not select a provider or authorize a
+disposable staging account.
+
 Phase 7F-2B1 does not select or purchase a managed provider. The later staging
 phase must evaluate and record the following before any production claim.
 

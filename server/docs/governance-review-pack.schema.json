@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpacaly.example/schemas/governance-review-pack-v1.json",
+  "title": "Alpacaly Phase 7F-2E governance review pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reviewPackVersion", "reviewPackId", "reviewPackDigest", "reviewBasisDigest", "createdAt", "scope",
+    "requesterReference", "executiveSummary", "candidatePacks", "ownerChecklists",
+    "candidateOpenQuestions", "claimSeverityReview", "rpoRtoWorksheet",
+    "evidenceStorageReview", "sourceFreshnessRegister", "risksAndLimitations",
+    "separationOfDuties", "decisionRecords", "consolidatedOutcome", "declarations"
+  ],
+  "properties": {
+    "reviewPackVersion": { "const": 1 },
+    "reviewPackId": { "$ref": "#/$defs/identifier" },
+    "reviewPackDigest": { "$ref": "#/$defs/digest" },
+    "reviewBasisDigest": { "$ref": "#/$defs/digest" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "scope": { "const": "INDEPENDENT_PROVIDER_GOVERNANCE_REVIEW_ONLY" },
+    "requesterReference": { "$ref": "#/$defs/identifier" },
+    "executiveSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "recommendation", "consolidatedOutcome", "nextDecision"],
+      "properties": {
+        "purpose": { "$ref": "#/$defs/longText" },
+        "recommendation": { "const": "NO_PROVIDER_RANKING_OR_SELECTION" },
+        "consolidatedOutcome": { "$ref": "#/$defs/outcome" },
+        "nextDecision": { "$ref": "#/$defs/longText" }
+      }
+    },
+    "candidatePacks": {
+      "type": "array", "minItems": 2, "maxItems": 10,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["packId", "packDigest", "providerLabel", "serviceLabel", "regionLabel", "regionCode", "reviewedAt"],
+        "properties": {
+          "packId": { "$ref": "#/$defs/identifier" },
+          "packDigest": { "$ref": "#/$defs/digest" },
+          "providerLabel": { "$ref": "#/$defs/text" },
+          "serviceLabel": { "$ref": "#/$defs/text" },
+          "regionLabel": { "$ref": "#/$defs/text" },
+          "regionCode": { "$ref": "#/$defs/identifier" },
+          "reviewedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "ownerChecklists": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["authority", "items"],
+        "properties": {
+          "authority": { "$ref": "#/$defs/authority" },
+          "items": {
+            "type": "array", "minItems": 5, "maxItems": 5,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["checkId", "description", "complete", "evidenceReferences"],
+              "properties": {
+                "checkId": { "$ref": "#/$defs/identifier" },
+                "description": { "$ref": "#/$defs/longText" },
+                "complete": { "type": "boolean" },
+                "evidenceReferences": { "$ref": "#/$defs/references" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "candidateOpenQuestions": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["questionId", "candidatePackId", "question", "requiredAuthorities", "status", "response", "evidenceReferences"],
+        "properties": {
+          "questionId": { "$ref": "#/$defs/identifier" },
+          "candidatePackId": { "$ref": "#/$defs/identifier" },
+          "question": { "$ref": "#/$defs/longText" },
+          "requiredAuthorities": { "$ref": "#/$defs/authorities" },
+          "status": { "enum": ["OPEN", "ANSWERED", "ACCEPTED_AS_CONDITION"] },
+          "response": { "type": ["string", "null"], "maxLength": 1500 },
+          "evidenceReferences": { "$ref": "#/$defs/references" }
+        }
+      }
+    },
+    "claimSeverityReview": {
+      "type": "array", "minItems": 22, "maxItems": 22,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["controlId", "proposedSeverity", "finalSeverity", "rationale", "requiredAuthorities", "reviewStatus", "notes", "candidateClaims"],
+        "properties": {
+          "controlId": { "$ref": "provider-candidate-assessment.schema.json#/$defs/controlId" },
+          "proposedSeverity": { "$ref": "#/$defs/severity" },
+          "finalSeverity": { "anyOf": [{ "$ref": "#/$defs/severity" }, { "type": "null" }] },
+          "rationale": { "$ref": "#/$defs/longText" },
+          "requiredAuthorities": { "$ref": "#/$defs/authorities" },
+          "reviewStatus": { "enum": ["PENDING", "ACCEPTED", "ACCEPTED_WITH_CONDITIONS", "REJECTED"] },
+          "notes": { "type": ["string", "null"], "maxLength": 1200 },
+          "candidateClaims": {
+            "type": "array", "minItems": 2,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["candidatePackId", "status", "nextVerification"],
+              "properties": {
+                "candidatePackId": { "$ref": "#/$defs/identifier" },
+                "status": { "enum": ["SUPPORTED_BY_PUBLISHED_DOCUMENTATION", "PARTIALLY_SUPPORTED_BY_PUBLISHED_DOCUMENTATION", "NOT_FOUND_IN_REVIEWED_DOCUMENTATION"] },
+                "nextVerification": { "type": "string", "minLength": 1, "maxLength": 100 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rpoRtoWorksheet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "proposedRpoSeconds", "proposedRtoSeconds", "reviewStatus", "evidenceReferences", "basis", "assumptions"],
+      "properties": {
+        "status": { "const": "PROPOSED_FOR_REVIEW" },
+        "proposedRpoSeconds": { "type": "integer", "minimum": 1 },
+        "proposedRtoSeconds": { "type": "integer", "minimum": 1 },
+        "reviewStatus": { "enum": ["PENDING", "REVIEWED"] },
+        "evidenceReferences": { "$ref": "#/$defs/references" },
+        "basis": { "$ref": "#/$defs/longText" },
+        "assumptions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/longText" } }
+      }
+    },
+    "evidenceStorageReview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reviewStatus", "outsideRepositoryRequired", "appendOnlyRequired", "encryptionRequired", "leastPrivilegeAccessRequired", "retentionDecisionRequired", "immutableDecisionEvidenceRequired", "evidenceReferences", "limitations"],
+      "properties": {
+        "reviewStatus": { "enum": ["PENDING", "ACCEPTABLE", "REJECTED"] },
+        "outsideRepositoryRequired": { "const": true },
+        "appendOnlyRequired": { "const": true },
+        "encryptionRequired": { "const": true },
+        "leastPrivilegeAccessRequired": { "const": true },
+        "retentionDecisionRequired": { "const": true },
+        "immutableDecisionEvidenceRequired": { "const": true },
+        "evidenceReferences": { "$ref": "#/$defs/references" },
+        "limitations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/longText" } }
+      }
+    },
+    "sourceFreshnessRegister": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["candidatePackId", "sourceId", "accessedAt", "documentDate", "ageDays", "maximumAgeDays", "status"],
+        "properties": {
+          "candidatePackId": { "$ref": "#/$defs/identifier" },
+          "sourceId": { "$ref": "#/$defs/identifier" },
+          "accessedAt": { "type": "string", "format": "date-time" },
+          "documentDate": { "type": ["string", "null"] },
+          "ageDays": { "type": "integer", "minimum": 0 },
+          "maximumAgeDays": { "type": "integer", "minimum": 1 },
+          "status": { "enum": ["CURRENT", "STALE"] }
+        }
+      }
+    },
+    "risksAndLimitations": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["riskId", "severity", "status", "statement"],
+        "properties": {
+          "riskId": { "$ref": "#/$defs/identifier" },
+          "severity": { "$ref": "#/$defs/severity" },
+          "status": { "enum": ["OPEN", "BLOCKED"] },
+          "statement": { "$ref": "#/$defs/longText" }
+        }
+      }
+    },
+    "separationOfDuties": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requiredAuthorities", "requesterMayDecide", "distinctReviewerPerAuthorityRequired", "oneDecisionPerAuthority", "exactCandidateDigestsRequired", "exactReviewBasisDigestRequired", "appendOnlyExternalDecisionEvidenceRequired"],
+      "properties": {
+        "requiredAuthorities": { "$ref": "#/$defs/allAuthorities" },
+        "requesterMayDecide": { "const": false },
+        "distinctReviewerPerAuthorityRequired": { "const": true },
+        "oneDecisionPerAuthority": { "const": true },
+        "exactCandidateDigestsRequired": { "const": true },
+        "exactReviewBasisDigestRequired": { "const": true },
+        "appendOnlyExternalDecisionEvidenceRequired": { "const": true }
+      }
+    },
+    "decisionRecords": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["decisionId", "authority", "reviewerReference", "decision", "rationale", "conditions", "decidedAt", "reviewBasisDigest", "reviewedCandidateDigests"],
+        "properties": {
+          "decisionId": { "$ref": "#/$defs/identifier" },
+          "authority": { "$ref": "#/$defs/authority" },
+          "reviewerReference": { "$ref": "#/$defs/identifier" },
+          "decision": { "enum": ["APPROVE", "APPROVE_WITH_CONDITIONS", "REJECT", "DEFER"] },
+          "rationale": { "$ref": "#/$defs/longText" },
+          "conditions": { "type": "array", "items": { "$ref": "#/$defs/longText" } },
+          "decidedAt": { "type": "string", "format": "date-time" },
+          "reviewBasisDigest": { "$ref": "#/$defs/digest" },
+          "reviewedCandidateDigests": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/digest" } }
+        }
+      }
+    },
+    "consolidatedOutcome": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "requiredAuthorities", "acceptableAuthorities", "conditionalAuthorities", "rejectingAuthorities", "deferredAuthorities", "missingAuthorities", "blockers", "providerSelected", "stagingAuthorized", "productionAuthorized", "nextDecision"],
+      "properties": {
+        "status": { "$ref": "#/$defs/outcome" },
+        "requiredAuthorities": { "$ref": "#/$defs/allAuthorities" },
+        "acceptableAuthorities": { "$ref": "#/$defs/authorities" },
+        "conditionalAuthorities": { "$ref": "#/$defs/authorities" },
+        "rejectingAuthorities": { "$ref": "#/$defs/authorities" },
+        "deferredAuthorities": { "$ref": "#/$defs/authorities" },
+        "missingAuthorities": { "$ref": "#/$defs/authorities" },
+        "blockers": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "providerSelected": { "const": false },
+        "stagingAuthorized": { "const": false },
+        "productionAuthorized": { "const": false },
+        "nextDecision": { "$ref": "#/$defs/longText" }
+      }
+    },
+    "declarations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["providerRanked", "providerSelected", "accountsCreated", "credentialsUsed", "providerApiCallsMade", "databasesConnected", "resourcesProvisioned", "stagingAuthorized", "productionAuthorized", "externalConnectionsAuthorized"],
+      "properties": {
+        "providerRanked": { "const": false },
+        "providerSelected": { "const": false },
+        "accountsCreated": { "const": false },
+        "credentialsUsed": { "const": false },
+        "providerApiCallsMade": { "const": false },
+        "databasesConnected": { "const": false },
+        "resourcesProvisioned": { "const": false },
+        "stagingAuthorized": { "const": false },
+        "productionAuthorized": { "const": false },
+        "externalConnectionsAuthorized": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "longText": { "type": "string", "minLength": 1, "maxLength": 1500 },
+    "authority": { "enum": ["TECHNICAL", "SECURITY", "OPERATIONS", "DATA_GOVERNANCE", "FINANCE"] },
+    "authorities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/authority" } },
+    "allAuthorities": { "type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": { "$ref": "#/$defs/authority" } },
+    "references": { "type": "array", "maxItems": 20, "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+    "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+    "outcome": { "enum": ["BLOCKED", "REVIEW_COMPLETE", "REVIEW_COMPLETE_WITH_CONDITIONS"] }
+  }
+}
