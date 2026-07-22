@@ -12,12 +12,21 @@ export {
     writeBackupManifest
 } from "./backup-manifest.js";
 export { BackupCatalogue } from "./backup-catalogue.js";
+export { BackupHoldRegistry } from "./backup-hold-registry.js";
 export { createPostgresBackup } from "./postgres-backup-service.js";
 export {
     reconcileRestoredDatabase,
     restorePostgresBackup
 } from "./postgres-restore-service.js";
 export { RecoveryDiagnosticsService } from "./recovery-diagnostics-service.js";
+export {
+    MANAGED_BACKUP_EVIDENCE_VERSION,
+    createManagedBackupEvidence,
+    managedBackupEvidenceDigest,
+    readManagedBackupEvidence,
+    writeManagedBackupEvidence
+} from "./managed-backup-evidence.js";
+export { ManagedBackupOperationsService } from "./managed-backup-operations-service.js";
 export { RecoverySafetyService } from "./recovery-safety-service.js";
 export { RestoredDataReconciler } from "./restored-data-reconciler.js";
 export {

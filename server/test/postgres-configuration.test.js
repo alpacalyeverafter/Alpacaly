@@ -66,6 +66,31 @@ test("recovery configuration rejects unsafe catalogue paths and parses worker bl
     assert.equal(config.restoreDrillMaximumAgeDays, 30);
 });
 
+test("managed backup operations require an external evidence directory", () => {
+    assert.throws(() => loadConfig({
+        MANAGED_BACKUP_OPERATIONS_ENABLED: "true"
+    }, { loadEnvFile: false }), /MANAGED_BACKUP_EVIDENCE_DIRECTORY is required/);
+    assert.throws(() => loadConfig({
+        MANAGED_BACKUP_EVIDENCE_DIRECTORY: "relative/provider-evidence"
+    }, { loadEnvFile: false }), /must be an absolute path/);
+    assert.throws(() => loadConfig({
+        MANAGED_BACKUP_OPERATIONS_ENABLED: "true",
+        MANAGED_BACKUP_EVIDENCE_DIRECTORY: "/tmp/alpacaly-managed-evidence"
+    }, { loadEnvFile: false }), /EXPECTED_DATABASE_IDENTITY/);
+    const config = loadConfig({
+        MANAGED_BACKUP_OPERATIONS_ENABLED: "true",
+        MANAGED_BACKUP_EVIDENCE_DIRECTORY: "/tmp/alpacaly-managed-evidence",
+        MANAGED_BACKUP_EXPECTED_ENVIRONMENT: "production",
+        MANAGED_BACKUP_EXPECTED_DATABASE_IDENTITY: `sha256:${"a".repeat(64)}`,
+        MANAGED_BACKUP_EXPECTED_REGION: "uk-south",
+        MANAGED_BACKUP_RPO_MINUTES: "20"
+    }, { loadEnvFile: false });
+    assert.equal(config.managedBackupOperationsEnabled, true);
+    assert.equal(config.managedBackupExpectedEnvironment, "production");
+    assert.equal(config.managedBackupExpectedRegion, "uk-south");
+    assert.equal(config.managedBackupRecoveryPointObjectiveMinutes, 20);
+});
+
 test("SQLite remains the zero-setup non-production default", () => {
     const config = loadConfig({
         NODE_ENV: "development",

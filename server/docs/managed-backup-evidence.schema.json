@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alpacaly.example/schemas/managed-backup-evidence-v1.json",
+  "title": "Alpacaly managed backup provider evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidenceVersion",
+    "evidenceId",
+    "collectedAt",
+    "environment",
+    "provider",
+    "database",
+    "backup",
+    "pitr",
+    "access",
+    "collection"
+  ],
+  "properties": {
+    "evidenceVersion": { "const": 1 },
+    "evidenceId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "evidenceDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "environment": { "enum": ["staging", "production"] },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "service", "region"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "service": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "region": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "backupReference": {
+          "type": ["string", "null"],
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "postgresVersion"],
+      "properties": {
+        "identity": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "postgresVersion": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "latestSuccessfulAt",
+        "encrypted",
+        "encryptionKeyManagement",
+        "restorable",
+        "retentionDays"
+      ],
+      "properties": {
+        "status": { "enum": ["AVAILABLE", "CREATING", "FAILED"] },
+        "latestSuccessfulAt": { "type": ["string", "null"], "format": "date-time" },
+        "encrypted": { "type": "boolean" },
+        "encryptionKeyManagement": {
+          "enum": ["PROVIDER_MANAGED", "CUSTOMER_MANAGED"]
+        },
+        "restorable": { "type": "boolean" },
+        "retentionDays": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pitr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "continuous",
+        "earliestRecoveryAt",
+        "latestRecoveryAt",
+        "latestWalAt",
+        "gapDetected"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "continuous": { "type": "boolean" },
+        "earliestRecoveryAt": { "type": ["string", "null"], "format": "date-time" },
+        "latestRecoveryAt": { "type": ["string", "null"], "format": "date-time" },
+        "latestWalAt": { "type": ["string", "null"], "format": "date-time" },
+        "gapDetected": { "type": "boolean" }
+      }
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationRoleSeparated",
+        "backupRoleSeparated",
+        "restoreRoleSeparated",
+        "humanMfaRequired",
+        "administrativeAuditLogging"
+      ],
+      "properties": {
+        "applicationRoleSeparated": { "type": "boolean" },
+        "backupRoleSeparated": { "type": "boolean" },
+        "restoreRoleSeparated": { "type": "boolean" },
+        "humanMfaRequired": { "type": "boolean" },
+        "administrativeAuditLogging": { "type": "boolean" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "exporterVersion"],
+      "properties": {
+        "source": { "enum": ["PROVIDER_API", "PROVIDER_EXPORT"] },
+        "exporterVersion": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    }
+  }
+}
