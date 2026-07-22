@@ -36,6 +36,18 @@ test("production configuration disables development contribution simulation by d
         ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION: "true"
     }, { loadEnvFile: false });
     assert.equal(config.enableDevelopmentContributionSimulation, false);
+    assert.equal(config.paymentSandboxEnabled, false);
+});
+
+test("configuration rejects live Stripe keys", () => {
+    assert.throws(
+        () => loadConfig({
+            NODE_ENV: "development",
+            DATABASE_PATH: ":memory:",
+            STRIPE_TEST_SECRET_KEY: "sk_live_not_allowed"
+        }, { loadEnvFile: false }),
+        /must be a Stripe test-mode key/
+    );
 });
 
 test("GET /health reports service health", async () => {
@@ -53,7 +65,7 @@ test("GET /health/ready reports sanitized persistence readiness", async () => {
     assert.equal(response.body.status, "ready");
     assert.deepEqual(response.body.persistence, {
         databaseType: "sqlite",
-        schemaVersion: 12,
+        schemaVersion: 13,
         reachable: true
     });
     assert.equal(response.body.workerCoordination.reachable, true);

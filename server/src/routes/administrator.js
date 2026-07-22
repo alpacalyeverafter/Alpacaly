@@ -99,6 +99,7 @@ export function createAdministratorRouter({
     administratorSecurityServices,
     deviceCommandServices,
     contributionLedgerServices,
+    paymentServices,
     operatorSafetyServices,
     recoveryDiagnosticsService = null
 }) {
@@ -227,6 +228,28 @@ export function createAdministratorRouter({
                     feedRequests: eventEngine.getQueueSummary(feeder.feederId),
                     archivedFeedRequests: eventEngine.getArchivedSummary(feeder.feederId),
                     queueStatistics: eventEngine.getQueueStatistics(feeder.feederId),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/payments",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_AUDIT_HISTORY,
+            () => ({ targetType: "SANDBOX_PAYMENTS" }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    sandbox: true,
+                    paymentRequests: paymentServices.paymentService
+                        .listPaymentRequestViews({ limit: req.query.limit }),
                     requestId: req.requestId
                 });
             } catch (error) {

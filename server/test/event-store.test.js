@@ -77,6 +77,7 @@ test("creates the required persistent Event Store tables", t => {
         "OperatorAuditRecords",
         "OperatorResolutionCases",
         "Outbox",
+        "PaymentRequests",
         "ProviderEvents",
         "Queue",
         "Queues",
@@ -94,7 +95,7 @@ test("creates the required persistent Event Store tables", t => {
         "WorkClaimHistory",
         "WorkerInstances"
     ]);
-    assert.equal(engine.eventStore.getSchemaVersion(), 12);
+    assert.equal(engine.eventStore.getSchemaVersion(), 13);
 
     engine.close();
 });

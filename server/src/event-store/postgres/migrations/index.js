@@ -10,14 +10,16 @@ import {
 import {
     migration004DisasterRecoverySafety
 } from "./004-disaster-recovery-safety.js";
+import { migration005SandboxPayments } from "./005-sandbox-payments.js";
 
-export const POSTGRES_SCHEMA_VERSION = 4;
+export const POSTGRES_SCHEMA_VERSION = 5;
 
 export const POSTGRES_MIGRATIONS = Object.freeze([
     migration001CentralSchema,
     migration002DistributedWorkerCoordination,
     migration003RelationalSafetyGuards,
-    migration004DisasterRecoverySafety
+    migration004DisasterRecoverySafety,
+    migration005SandboxPayments
 ]);
 
 function checksum(sql) {

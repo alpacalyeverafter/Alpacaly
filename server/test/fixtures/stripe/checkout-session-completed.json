@@ -1,0 +1,23 @@
+{
+  "id": "evt_checkout_completed_fixture",
+  "object": "event",
+  "type": "checkout.session.completed",
+  "created": 1784721600,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "cs_test_checkout_fixture",
+      "object": "checkout.session",
+      "mode": "payment",
+      "client_reference_id": "payment_request_fixture",
+      "amount_total": 500,
+      "currency": "gbp",
+      "payment_status": "paid",
+      "status": "complete",
+      "payment_intent": "pi_test_fixture",
+      "metadata": {
+        "alpacaly_payment_request_id": "payment_request_fixture"
+      }
+    }
+  }
+}

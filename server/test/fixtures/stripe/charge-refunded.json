@@ -1,0 +1,19 @@
+{
+  "id": "evt_charge_refunded_fixture",
+  "object": "event",
+  "type": "charge.refunded",
+  "created": 1784721600,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "ch_test_fixture",
+      "object": "charge",
+      "amount": 500,
+      "amount_refunded": 500,
+      "currency": "gbp",
+      "refunded": true,
+      "payment_intent": "pi_test_fixture",
+      "metadata": {}
+    }
+  }
+}

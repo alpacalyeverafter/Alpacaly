@@ -855,7 +855,7 @@ test("migration 7 remains compatible when the store advances to schema 12", t =>
     legacy.close();
     assert.equal(existsSync(databasePath), true);
     const migrated = new SqliteEventStore({ databasePath, logger });
-    assert.equal(migrated.getSchemaVersion(), 12);
+    assert.equal(migrated.getSchemaVersion(), 13);
     assert.ok(migrated.getTableNames().includes("EmergencyStops"));
     assert.ok(migrated.getTableNames().includes("ApprovalRequests"));
     assert.ok(migrated.getTableNames().includes("OperatorResolutionCases"));

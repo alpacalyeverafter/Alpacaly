@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { createContributionLedgerServices } from "../src/contribution-ledger/index.js";
 import { DEFAULT_RESOURCE_IDS } from "../src/domain/resources.js";
+import { createPaymentRequest } from "../src/domain/payments.js";
 import { EventEngine } from "../src/event-engine/event-engine.js";
 import { PostgresEventStore } from "../src/event-store/postgres-event-store.js";
 import {
@@ -103,12 +104,32 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
         message: "PostgreSQL persistence parity"
     });
 
-    assert.equal(eventStore.getSchemaVersion(), 4);
+    const paymentRequest = createPaymentRequest({
+        provider: "STRIPE",
+        mode: "TEST",
+        clientRequestId: `postgres-payment-${randomUUID()}`,
+        supporterDisplayName: "PostgreSQL Payment",
+        amountMinor: 500,
+        currency: "GBP"
+    });
+    eventStore.createPaymentRequest(paymentRequest);
+    eventStore.attachPaymentCheckoutSession(paymentRequest.paymentRequestId, {
+        checkoutSessionId: `cs_test_${randomUUID()}`,
+        checkoutUrl: "https://checkout.stripe.test/postgres",
+        providerStatus: "open",
+        updatedAt: new Date().toISOString()
+    });
+
+    assert.equal(eventStore.getSchemaVersion(), 5);
     assert.equal(result.created, true);
     assert.equal(eventStore.getFeedIntent(result.feedIntent.feedIntentId).status, "COMPLETED");
     assert.equal(eventStore.getEventIdByFeedIntent(result.feedIntent.feedIntentId),
         result.feedRequest.eventId);
     assert.equal(eventStore.getPersistenceDiagnostics().databaseType, "postgres");
+    assert.equal(
+        eventStore.getPaymentRequest(paymentRequest.paymentRequestId).status,
+        "PENDING"
+    );
 
     services.outboxWorker.stop();
     eventEngine.close();
