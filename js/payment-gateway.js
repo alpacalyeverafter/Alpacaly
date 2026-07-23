@@ -14,16 +14,21 @@
             this.apiClient = apiClient;
         }
 
-        createCheckoutSession({ packId, clientRequestId, walletToken }) {
+        createCheckoutSession({ packId, clientRequestId, walletToken, walletId }) {
             return this.apiClient.createFeedCreditCheckout({
                 packId,
                 clientRequestId,
-                walletToken
+                walletToken,
+                walletId
             });
         }
 
-        getPaymentRequest(paymentRequestId, walletToken) {
-            return this.apiClient.getPaymentRequest(paymentRequestId, walletToken);
+        getPaymentRequest(paymentRequestId, walletToken, walletId = null) {
+            return this.apiClient.getPaymentRequest(
+                paymentRequestId,
+                walletToken,
+                walletId
+            );
         }
     }
 

@@ -21,6 +21,9 @@
     const feedCreditActivityList = document.getElementById(
         "feed-credit-activity-list"
     );
+    const supporterAccountActivityList = document.getElementById(
+        "supporter-account-activity-list"
+    );
     const feedingNowElement = document.getElementById("feeding-now");
     const waitingQueueList = document.getElementById("waiting-queue-list");
     const emergencyStopList = document.getElementById("emergency-stop-list");
@@ -53,6 +56,7 @@
     let paymentRefreshInFlight = false;
     let sandboxDiagnosticsRefreshInFlight = false;
     let feedCreditRefreshInFlight = false;
+    let supporterAccountRefreshInFlight = false;
 
     function formatCurrency(value) {
         return `£${Number(value || 0).toFixed(2)}`;
@@ -421,6 +425,86 @@
         }
     }
 
+    function renderSupporterAccounts(data = null, unavailableMessage = null) {
+        supporterAccountActivityList.replaceChildren();
+        if (unavailableMessage) {
+            supporterAccountActivityList.append(createStatusItem(
+                "Supporter accounts unavailable",
+                unavailableMessage
+            ));
+            return;
+        }
+        const accounts = data?.accounts || [];
+        if (accounts.length === 0) {
+            supporterAccountActivityList.append(createStatusItem(
+                "No supporter accounts yet",
+                "Guest Feed Credit wallets remain available without an account."
+            ));
+            return;
+        }
+        accounts.forEach(account => {
+            const item = createStatusItem(
+                account.displayName || account.emailNormalized || "Supporter account",
+                [
+                    account.status,
+                    account.emailVerified ? "Email verified" : "Email not verified",
+                    `Created ${new Date(account.createdAt).toLocaleString()}`,
+                    `Account ${account.accountId}`
+                ].join(" • ")
+            );
+            if (account.status !== "DELETED") {
+                item.append(createActionButton("Revoke sessions", async () => {
+                    const reason = window.prompt("Reason for revoking all sessions:");
+                    if (!reason) {
+                        return;
+                    }
+                    await apiClient.revokeSupporterAccountSessions(
+                        account.accountId,
+                        reason
+                    );
+                    await refreshSupporterAccounts();
+                }));
+                item.append(createActionButton(
+                    account.status === "ACTIVE" ? "Suspend" : "Restore",
+                    async () => {
+                        const status = account.status === "ACTIVE"
+                            ? "SUSPENDED"
+                            : "ACTIVE";
+                        const reason = window.prompt(`Reason to ${status.toLowerCase()} account:`);
+                        if (!reason || !window.confirm(
+                            `${status === "SUSPENDED" ? "Suspend" : "Restore"} this account?`
+                        )) {
+                            return;
+                        }
+                        await apiClient.setSupporterAccountStatus(
+                            account.accountId,
+                            status,
+                            reason
+                        );
+                        await refreshSupporterAccounts();
+                    }
+                ));
+            }
+            item.style.marginBottom = "12px";
+            supporterAccountActivityList.append(item);
+        });
+    }
+
+    async function refreshSupporterAccounts() {
+        if (!administratorAuthenticated || supporterAccountRefreshInFlight) {
+            return;
+        }
+        supporterAccountRefreshInFlight = true;
+        try {
+            const response = await apiClient.getAdministratorSupporterAccounts(100);
+            renderSupporterAccounts(response.supporterAccounts);
+        } catch (error) {
+            renderSupporterAccounts(null, error.message || "Please try again shortly.");
+        } finally {
+            supporterAccountRefreshInFlight = false;
+        }
+    }
+
     function formatDiagnosticTime(value) {
         if (!value) {
             return "No webhook received";
@@ -687,7 +771,8 @@
             await Promise.all([
                 renderPayments(),
                 refreshSandboxDiagnostics(),
-                refreshFeedCredits()
+                refreshFeedCredits(),
+                refreshSupporterAccounts()
             ]);
         } catch (error) {
             administratorAuthenticated = false;
@@ -703,6 +788,7 @@
 
     renderPaymentActivity([]);
     renderFeedCreditActivity();
+    renderSupporterAccounts();
     renderHistory([]);
     renderEmergencyStops([]);
     renderApprovalRequests([]);
@@ -733,6 +819,7 @@
         void renderPayments();
         void refreshSandboxDiagnostics();
         void refreshFeedCredits();
+        void refreshSupporterAccounts();
     }, 5000);
     void initializeAdministrator();
 })();

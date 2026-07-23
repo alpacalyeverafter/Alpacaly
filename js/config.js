@@ -19,7 +19,9 @@ const CONFIG = {
 
     defaultFeederId: "feeder_00000000-0000-4000-8000-000000000002",
 
-    developmentAdministratorIdentity: "local-admin"
+    developmentAdministratorIdentity: "local-admin",
+
+    developmentSupporterIdentity: "local-supporter"
 
 };
 

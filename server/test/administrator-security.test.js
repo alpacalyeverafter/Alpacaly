@@ -144,7 +144,7 @@ test("persistence diagnostics are platform-protected and secret-free", async () 
         .expect(200);
 
     assert.equal(response.body.persistence.databaseType, "sqlite");
-    assert.equal(response.body.persistence.schemaVersion, 14);
+    assert.equal(response.body.persistence.schemaVersion, 15);
     assert.ok(response.body.coordination.feedIntents.claims);
     const serialized = JSON.stringify(response.body).toLowerCase();
     assert.equal(serialized.includes("database_url"), false);
@@ -158,7 +158,9 @@ test("development authentication is rejected in production", async () => {
         config: {
             nodeEnv: "production",
             enableDevelopmentAuthentication: true,
-            enableDevelopmentContributionSimulation: false
+            enableDevelopmentContributionSimulation: false,
+            supporterAuthProvider: "unconfigured",
+            enableDevelopmentSupporterAuthentication: false
         }
     });
     const response = await request(app)

@@ -7,6 +7,10 @@ const COUNT_TABLES = Object.freeze([
     "CreditPurchases",
     "CreditReservations",
     "CreditLedgerEntries",
+    "SupporterAccounts",
+    "SupporterWalletLinks",
+    "SupporterSessions",
+    "SupporterAccountEvents",
     "Contributions",
     "FeedIntents",
     "Outbox",
@@ -37,6 +41,9 @@ const UNIQUE_IDENTITIES = Object.freeze([
     ["CreditPurchases", "purchaseId"],
     ["CreditReservations", "reservationId"],
     ["CreditLedgerEntries", "ledgerEntryId"],
+    ["SupporterAccounts", "accountId"],
+    ["SupporterWalletLinks", "linkId"],
+    ["SupporterAccountEvents", "eventId"],
     ["Contributions", "contributionId"],
     ["FeedIntents", "feedIntentId"],
     ["Events", "eventId"],
@@ -154,6 +161,30 @@ export class RestoredDataReconciler {
                 SELECT COUNT(*) AS count FROM CreditLedgerEntries ledger
                 LEFT JOIN CreditWallets wallet ON wallet.walletId = ledger.walletId
                 WHERE wallet.walletId IS NULL
+            `),
+            supporterWalletLinkAccountOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM SupporterWalletLinks link
+                LEFT JOIN SupporterAccounts account
+                  ON account.accountId = link.accountId
+                WHERE account.accountId IS NULL
+            `),
+            supporterWalletLinkWalletOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM SupporterWalletLinks link
+                LEFT JOIN CreditWallets wallet ON wallet.walletId = link.walletId
+                WHERE wallet.walletId IS NULL
+            `),
+            supporterSessionAccountOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM SupporterSessions session
+                LEFT JOIN SupporterAccounts account
+                  ON account.accountId = session.accountId
+                WHERE account.accountId IS NULL
+            `),
+            duplicateActiveSupporterWalletLinks: count(this.database, `
+                SELECT COUNT(*) AS count FROM (
+                    SELECT walletId FROM SupporterWalletLinks
+                    WHERE status = 'ACTIVE'
+                    GROUP BY walletId HAVING COUNT(*) > 1
+                ) duplicate_links
             `),
             negativeCreditBalances: count(this.database, `
                 SELECT COUNT(*) AS count FROM (
@@ -321,6 +352,7 @@ export class RestoredDataReconciler {
             "approval_decisions_append_only",
             "approval_history_append_only",
             "disaster_recovery_events_append_only",
+            "supporter_account_events_append_only",
             ...(this.eventStore.databaseType === "postgres" ? [
                 "audit_records_append_only",
                 "device_command_history_append_only",

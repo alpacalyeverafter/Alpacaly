@@ -628,6 +628,53 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
             DEFAULTS.managedIdentityProviderConfigured,
             "MANAGED_IDENTITY_PROVIDER_CONFIGURED"
         ),
+        supporterAuthProvider: parseChoice(
+            env.SUPPORTER_AUTH_PROVIDER,
+            DEFAULTS.supporterAuthProvider,
+            "SUPPORTER_AUTH_PROVIDER",
+            ["unconfigured", "development", "auth0"]
+        ),
+        enableDevelopmentSupporterAuthentication: nodeEnv !== "production"
+            && parseBoolean(
+                env.ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION,
+                DEFAULTS.enableDevelopmentSupporterAuthentication,
+                "ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION"
+            ),
+        supporterAuthBaseUrl: parseHttpUrl(
+            env.SUPPORTER_AUTH_BASE_URL,
+            DEFAULTS.supporterAuthBaseUrl,
+            "SUPPORTER_AUTH_BASE_URL"
+        ),
+        supporterPublicReturnUrl: parseHttpUrl(
+            env.SUPPORTER_PUBLIC_RETURN_URL,
+            DEFAULTS.supporterPublicReturnUrl,
+            "SUPPORTER_PUBLIC_RETURN_URL"
+        ),
+        supporterCsrfSecret: String(
+            env.SUPPORTER_CSRF_SECRET || DEFAULTS.supporterCsrfSecret
+        ).trim(),
+        supporterSessionRollingSeconds: parseInteger(
+            env.SUPPORTER_SESSION_ROLLING_SECONDS,
+            DEFAULTS.supporterSessionRollingSeconds,
+            "SUPPORTER_SESSION_ROLLING_SECONDS",
+            { minimum: 300, maximum: 30 * 24 * 60 * 60 }
+        ),
+        supporterSessionAbsoluteSeconds: parseInteger(
+            env.SUPPORTER_SESSION_ABSOLUTE_SECONDS,
+            DEFAULTS.supporterSessionAbsoluteSeconds,
+            "SUPPORTER_SESSION_ABSOLUTE_SECONDS",
+            { minimum: 600, maximum: 90 * 24 * 60 * 60 }
+        ),
+        supporterRecentAuthenticationSeconds: parseInteger(
+            env.SUPPORTER_RECENT_AUTHENTICATION_SECONDS,
+            DEFAULTS.supporterRecentAuthenticationSeconds,
+            "SUPPORTER_RECENT_AUTHENTICATION_SECONDS",
+            { minimum: 60, maximum: 24 * 60 * 60 }
+        ),
+        auth0IssuerBaseUrl: optionalString(env.AUTH0_ISSUER_BASE_URL),
+        auth0ClientId: optionalString(env.AUTH0_CLIENT_ID),
+        auth0ClientSecret: optionalString(env.AUTH0_CLIENT_SECRET),
+        auth0SessionSecret: optionalString(env.AUTH0_SESSION_SECRET),
         criticalApprovalLifetimeMs: parseInteger(
             env.CRITICAL_APPROVAL_LIFETIME_MS,
             DEFAULTS.criticalApprovalLifetimeMs,
@@ -738,6 +785,59 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
     if (config.paymentSandboxEnabled && !isLoopbackUrl(config.paymentPublicBaseUrl)) {
         throw new Error(
             "PAYMENT_PUBLIC_BASE_URL must use a loopback host when the payment sandbox is enabled."
+        );
+    }
+    if (nodeEnv === "production" && config.supporterAuthProvider === "development") {
+        throw new Error("Production rejects development supporter authentication.");
+    }
+    if (
+        config.supporterAuthProvider === "development"
+        && !config.enableDevelopmentSupporterAuthentication
+    ) {
+        throw new Error(
+            "ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION must be true for development supporter authentication."
+        );
+    }
+    if (config.supporterAuthProvider === "auth0") {
+        const missing = [
+            ["AUTH0_ISSUER_BASE_URL", config.auth0IssuerBaseUrl],
+            ["AUTH0_CLIENT_ID", config.auth0ClientId],
+            ["AUTH0_SESSION_SECRET", config.auth0SessionSecret]
+        ].filter(([, value]) => !value).map(([name]) => name);
+        if (missing.length > 0) {
+            throw new Error(`Auth0 supporter authentication is missing: ${missing.join(", ")}.`);
+        }
+        if (config.auth0SessionSecret.length < 32) {
+            throw new Error("AUTH0_SESSION_SECRET must contain at least 32 characters.");
+        }
+        if (nodeEnv === "production") {
+            if (!config.auth0IssuerBaseUrl.startsWith("https://")) {
+                throw new Error("Production Auth0 issuer must use HTTPS.");
+            }
+            if (!config.supporterAuthBaseUrl.startsWith("https://")) {
+                throw new Error("Production supporter authentication must use HTTPS.");
+            }
+            if (!config.supporterPublicReturnUrl.startsWith("https://")) {
+                throw new Error("Production supporter return URL must use HTTPS.");
+            }
+        }
+    }
+    if (config.supporterCsrfSecret.length < 32) {
+        throw new Error("SUPPORTER_CSRF_SECRET must contain at least 32 characters.");
+    }
+    if (
+        nodeEnv === "production"
+        && config.supporterAuthProvider === "auth0"
+        && config.supporterCsrfSecret === DEFAULTS.supporterCsrfSecret
+    ) {
+        throw new Error("Production requires a secret-managed SUPPORTER_CSRF_SECRET.");
+    }
+    if (
+        config.supporterSessionAbsoluteSeconds
+        < config.supporterSessionRollingSeconds
+    ) {
+        throw new Error(
+            "SUPPORTER_SESSION_ABSOLUTE_SECONDS must not be shorter than the rolling session."
         );
     }
     if (!config.postgresApplicationName) {

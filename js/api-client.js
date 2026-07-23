@@ -27,6 +27,7 @@
             baseUrl = "",
             timeoutMs = 5000,
             developmentAdministratorIdentity = null,
+            developmentSupporterIdentity = null,
             fetchImpl = global.fetch ? global.fetch.bind(global) : null,
             eventSourceFactory = global.EventSource
                 ? url => new global.EventSource(url)
@@ -38,6 +39,11 @@
                 developmentAdministratorIdentity
                     ? String(developmentAdministratorIdentity)
                     : null;
+            this.developmentSupporterIdentity = developmentSupporterIdentity
+                ? String(developmentSupporterIdentity)
+                : null;
+            this.supporterCsrfToken = null;
+            this.supporterWalletId = null;
             this.fetchImpl = fetchImpl;
             this.eventSourceFactory = eventSourceFactory;
         }
@@ -80,52 +86,128 @@
             });
         }
 
-        getFeedCreditWallet(walletToken) {
-            return this.request("/api/feed-credits/wallet", { walletToken });
+        getFeedCreditWallet(walletToken = null, walletId = null) {
+            return this.request("/api/feed-credits/wallet", {
+                walletToken,
+                walletId,
+                supporter: Boolean(walletId)
+            });
         }
 
-        createFeedCreditCheckout({ packId, clientRequestId, walletToken }) {
+        createFeedCreditCheckout({ packId, clientRequestId, walletToken, walletId }) {
             return this.request("/api/feed-credits/checkout-sessions", {
                 method: "POST",
                 body: { packId, clientRequestId },
-                walletToken
+                walletToken,
+                walletId,
+                supporter: Boolean(walletId)
             });
         }
 
-        reserveFeedCredit({ clientRequestId, walletToken }) {
+        reserveFeedCredit({ clientRequestId, walletToken, walletId }) {
             return this.request("/api/feed-credits/reservations", {
                 method: "POST",
                 body: { clientRequestId },
-                walletToken
+                walletToken,
+                walletId,
+                supporter: Boolean(walletId)
             });
         }
 
-        heartbeatFeedCreditReservation(reservationId, walletToken, active = true) {
+        heartbeatFeedCreditReservation(
+            reservationId,
+            walletToken,
+            active = true,
+            walletId = null
+        ) {
             return this.request(
                 `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/presence`,
-                { method: "POST", body: { active }, walletToken }
+                {
+                    method: "POST",
+                    body: { active },
+                    walletToken,
+                    walletId,
+                    supporter: Boolean(walletId)
+                }
             );
         }
 
-        confirmFeedCreditReservation(reservationId, walletToken) {
+        confirmFeedCreditReservation(reservationId, walletToken, walletId = null) {
             return this.request(
                 `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/confirm`,
-                { method: "POST", body: {}, walletToken }
+                {
+                    method: "POST",
+                    body: {},
+                    walletToken,
+                    walletId,
+                    supporter: Boolean(walletId)
+                }
             );
         }
 
-        cancelFeedCreditReservation(reservationId, walletToken) {
+        cancelFeedCreditReservation(reservationId, walletToken, walletId = null) {
             return this.request(
                 `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/cancel`,
-                { method: "POST", body: {}, walletToken }
+                {
+                    method: "POST",
+                    body: {},
+                    walletToken,
+                    walletId,
+                    supporter: Boolean(walletId)
+                }
             );
         }
 
-        getPaymentRequest(paymentRequestId, walletToken = null) {
+        getPaymentRequest(paymentRequestId, walletToken = null, walletId = null) {
             return this.request(
                 `/api/payments/requests/${encodeURIComponent(paymentRequestId)}`,
-                { walletToken }
+                { walletToken, walletId, supporter: Boolean(walletId) }
             );
+        }
+
+        getSupporterAccountSession() {
+            return this.request("/api/supporter-accounts/session", {
+                supporter: true
+            });
+        }
+
+        setSupporterAccountSession(session) {
+            this.supporterCsrfToken = session?.csrfToken || null;
+            this.supporterWalletId = session?.wallets?.[0]?.walletId || null;
+        }
+
+        linkSupporterWallet(walletToken, clientRequestId) {
+            return this.request("/api/supporter-accounts/wallets/link", {
+                method: "POST",
+                body: { clientRequestId },
+                walletToken,
+                supporter: true,
+                csrfToken: this.supporterCsrfToken
+            });
+        }
+
+        revokeSupporterSessions() {
+            return this.request("/api/supporter-accounts/sessions/revoke-all", {
+                method: "POST",
+                body: {},
+                supporter: true,
+                csrfToken: this.supporterCsrfToken
+            });
+        }
+
+        exportSupporterAccount() {
+            return this.request("/api/supporter-accounts/export", {
+                supporter: true
+            });
+        }
+
+        deleteSupporterAccount() {
+            return this.request("/api/supporter-accounts/delete", {
+                method: "POST",
+                body: { confirmation: "DELETE MY ACCOUNT" },
+                supporter: true,
+                csrfToken: this.supporterCsrfToken
+            });
         }
 
         getFeedRequest(feedRequestId) {
@@ -176,6 +258,36 @@
             return this.request(
                 `/api/admin/feed-credits/wallets/${encodeURIComponent(walletId)}/corrections`,
                 { method: "POST", body: correction, administrator: true }
+            );
+        }
+
+        getAdministratorSupporterAccounts(limit = 100) {
+            return this.request(
+                `/api/admin/supporter-accounts?limit=${encodeURIComponent(limit)}`,
+                { administrator: true }
+            );
+        }
+
+        setSupporterAccountStatus(accountId, status, reason) {
+            return this.request(
+                `/api/admin/supporter-accounts/${encodeURIComponent(accountId)}/status`,
+                {
+                    method: "POST",
+                    body: { status, reason },
+                    administrator: true
+                }
+            );
+        }
+
+        revokeSupporterAccountSessions(accountId, reason) {
+            return this.request(
+                `/api/admin/supporter-accounts/${encodeURIComponent(accountId)}`
+                + "/sessions/revoke",
+                {
+                    method: "POST",
+                    body: { reason },
+                    administrator: true
+                }
             );
         }
 
@@ -303,7 +415,10 @@
             method = "GET",
             body,
             administrator = false,
-            walletToken = null
+            walletToken = null,
+            walletId = null,
+            supporter = false,
+            csrfToken = null
         } = {}) {
             if (typeof this.fetchImpl !== "function") {
                 throw new ApiClientError("This browser cannot connect to the feed service.", {
@@ -327,6 +442,20 @@
             } else if (walletToken) {
                 headers.authorization = `Wallet ${walletToken}`;
             }
+            const accountWalletId = walletId || (
+                supporter ? this.supporterWalletId : null
+            );
+            if (!walletToken && accountWalletId) {
+                headers["x-wallet-id"] = accountWalletId;
+            }
+            if (supporter && this.developmentSupporterIdentity) {
+                headers["x-development-supporter"] =
+                    this.developmentSupporterIdentity;
+            }
+            const accountCsrf = csrfToken || this.supporterCsrfToken;
+            if (supporter && accountCsrf && method !== "GET") {
+                headers["x-alpacaly-csrf"] = accountCsrf;
+            }
 
             let response;
             try {
@@ -334,6 +463,7 @@
                     method,
                     headers,
                     body: body === undefined ? undefined : JSON.stringify(body),
+                    credentials: "include",
                     signal: controller.signal
                 });
             } catch (error) {
@@ -407,7 +537,9 @@
                 baseUrl: config.apiBaseUrl,
                 timeoutMs: config.apiRequestTimeoutMs,
                 developmentAdministratorIdentity:
-                    config.developmentAdministratorIdentity
+                    config.developmentAdministratorIdentity,
+                developmentSupporterIdentity:
+                    config.developmentSupporterIdentity
             });
         }
     }

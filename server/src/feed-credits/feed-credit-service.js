@@ -95,6 +95,21 @@ export class FeedCreditService {
     }
 
     authenticateWallet(recoveryToken, { touch = true } = {}) {
+        if (recoveryToken?.trustedAccountWallet === true) {
+            const walletId = normalizedText(recoveryToken.walletId);
+            const wallet = walletId ? this.store.getWallet(walletId) : null;
+            if (!wallet || wallet.status !== "ACTIVE") {
+                throw new ApplicationError(
+                    "The Feed Credit wallet could not be accessed.", {
+                        code: "SUPPORTER_WALLET_ACCESS_DENIED",
+                        statusCode: 403
+                    }
+                );
+            }
+            return touch
+                ? this.store.touchWallet(wallet.walletId, this.clock().toISOString())
+                : wallet;
+        }
         const token = normalizedText(recoveryToken);
         if (!/^[A-Za-z0-9_-]{40,100}$/.test(token)) {
             throw new ApplicationError("The Feed Credit wallet could not be recovered.", {

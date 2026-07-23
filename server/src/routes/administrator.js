@@ -100,6 +100,7 @@ export function createAdministratorRouter({
     deviceCommandServices,
     contributionLedgerServices,
     paymentServices,
+    supporterAccountServices = null,
     operatorSafetyServices,
     recoveryDiagnosticsService = null
 }) {
@@ -319,6 +320,84 @@ export function createAdministratorRouter({
                     ...result,
                     requestId: req.requestId
                 });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
+        "/supporter-accounts",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_AUDIT_HISTORY,
+            () => ({ targetType: "SUPPORTER_ACCOUNT_DIRECTORY" }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    supporterAccounts: supporterAccountServices?.service
+                        .getAdministratorView(req.query.limit) || {
+                        accounts: [],
+                        events: []
+                    },
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/supporter-accounts/:accountId/status",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SECURITY_CONFIGURATION,
+            req => ({
+                targetType: "SUPPORTER_ACCOUNT",
+                targetId: req.params.accountId
+            }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                const account = supporterAccountServices.service.setAccountStatus(
+                    req.params.accountId,
+                    req.body?.status,
+                    req.administratorIdentity.administratorId,
+                    req.body?.reason,
+                    req.requestId
+                );
+                res.status(200).json({ account, requestId: req.requestId });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/supporter-accounts/:accountId/sessions/revoke",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SECURITY_CONFIGURATION,
+            req => ({
+                targetType: "SUPPORTER_ACCOUNT_SESSION",
+                targetId: req.params.accountId
+            }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                const account = supporterAccountServices.service
+                    .revokeAccountSessions(
+                        req.params.accountId,
+                        req.administratorIdentity.administratorId,
+                        req.body?.reason,
+                        req.requestId
+                    );
+                res.status(200).json({ account, revoked: true, requestId: req.requestId });
             } catch (error) {
                 next(error);
             }

@@ -1,5 +1,21 @@
 # Alpacaly Event Engine Server
 
+## Phase 8D optional supporter accounts and wallet recovery
+
+Guest Feed Credit wallets remain available without registration. Supporters may
+optionally protect a wallet with a managed Auth0 Universal Login identity,
+recover it across devices, inspect its full credit history, revoke sessions,
+export their data or delete the account. Alpacaly stores no supporter password.
+The provider-neutral account boundary, unique wallet ownership, CSRF-protected
+account-wallet access and administrator recovery tools are implemented, but no
+Auth0 tenant or production service is connected.
+
+SQLite migration 15 and PostgreSQL migration 7 add supporter accounts, unique
+wallet links, revocable sessions and append-only account events. See
+[Phase 8D: Supporter Accounts and Wallet Recovery](docs/phase-8d-supporter-accounts-wallet-recovery.md)
+for the journey, security model, privacy/deletion rules, configuration and
+remaining Phase 8E decisions.
+
 ## Phase 8C Feed Credit wallet and click-to-feed
 
 Stripe Test Mode checkout now buys durable **Feed Credits** only. It never
@@ -152,7 +168,7 @@ Intentionally excluded:
 
 - Stripe live-mode or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
-- Real managed OpenID Connect provider integration, passwords, and production sessions
+- A configured production Auth0 tenant, supporter passwords in Alpacaly, or production sessions
 - Real feeder control, GPIO, Raspberry Pi, or ESP32 integration
 - Production broker hosting, certificates, certificate authority, or device enrolment
 - Camera integration or streaming
@@ -189,7 +205,7 @@ The default server address is `http://localhost:3000`.
 | `FEEDING_WINDOW_START` | `08:00` | Local start time in 24-hour format. |
 | `FEEDING_WINDOW_END` | `18:00` | Local end time in 24-hour format. |
 | `REQUEST_BODY_LIMIT` | `16kb` | Maximum JSON request-body size accepted by Express. |
-| `CORS_ORIGIN` | `*` | Browser origin allowed to call the API. Restrict this before production. |
+| `CORS_ORIGIN` | `http://localhost:8000` | Browser origin allowed to call the API. Use an explicit trusted origin because supporter account requests include secure browser credentials. |
 | `CENTRAL_DATABASE_TYPE` | `sqlite` | Selects `sqlite` outside production or `postgres`; production requires PostgreSQL. |
 | `DATABASE_PATH` | `./data/alpacaly.sqlite` | SQLite Event Store path, resolved from the server working directory. |
 | `DATABASE_URL` | unset | PostgreSQL connection secret. Required for the PostgreSQL central store and never logged. |
@@ -221,6 +237,16 @@ The default server address is `http://localhost:3000`.
 | `ENABLE_DEVELOPMENT_CONTRIBUTION_SIMULATION` | development only | Enables simulated WEBSITE Contributions and legacy write adapters. Always disabled when `NODE_ENV=production`. |
 | `ENABLE_DEVELOPMENT_AUTHENTICATION` | `false` | Explicitly enables server-controlled local administrator identities in development or test. It is always rejected in production. The example development environment enables it. |
 | `MANAGED_IDENTITY_PROVIDER_CONFIGURED` | `false` | Confirms that production critical actions are backed by a managed identity provider. Development identities never satisfy this production safeguard. |
+| `SUPPORTER_AUTH_PROVIDER` | `unconfigured` | Optional supporter account provider: `unconfigured`, explicitly enabled `development`, or managed `auth0`. Guest wallets remain available in every mode. |
+| `ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION` | `false` | Enables fixed local supporter identities outside production only. Production rejects this adapter. |
+| `SUPPORTER_AUTH_BASE_URL` | `http://localhost:3000` | Origin handling the managed OIDC callback; production requires HTTPS. |
+| `SUPPORTER_PUBLIC_RETURN_URL` | `http://localhost:8000/index.html` | Approved website return after login/logout; production requires HTTPS. |
+| `SUPPORTER_CSRF_SECRET` | development-only placeholder | Secret-managed HMAC key binding account-wallet mutations to the current account session. |
+| `SUPPORTER_SESSION_ROLLING_SECONDS` | `3600` | Rolling managed supporter session lifetime. |
+| `SUPPORTER_SESSION_ABSOLUTE_SECONDS` | `604800` | Absolute managed supporter session lifetime; cannot be shorter than the rolling lifetime. |
+| `SUPPORTER_RECENT_AUTHENTICATION_SECONDS` | `600` | Maximum authentication age for wallet linking or account deletion. |
+| `AUTH0_ISSUER_BASE_URL`, `AUTH0_CLIENT_ID` | unset | Auth0 Universal Login tenant/application identity; required only when `SUPPORTER_AUTH_PROVIDER=auth0`. |
+| `AUTH0_CLIENT_SECRET`, `AUTH0_SESSION_SECRET` | unset | Optional OIDC client credential and required encrypted-cookie secret. Never commit either value. |
 | `CRITICAL_APPROVAL_LIFETIME_MS` | `900000` | Maximum lifetime of a dual-approval request. It is bounded to 1–60 minutes and defaults to 15 minutes. |
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | Delay between background checks for durable FeedIntent work. |
 | `OUTBOX_RETRY_DELAY_MS` | `1000` | Delay before retrying a failed Outbox processing attempt. |
@@ -263,7 +289,7 @@ The default server address is `http://localhost:3000`.
 
 The central Event Store uses PostgreSQL in production and `node:sqlite` for zero-setup development/testing. File-backed SQLite databases retain foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout. The independent edge journal remains SQLite in every environment.
 
-The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 14 adds Feed Credit wallets, purchases, reservations and an append-only ledger; PostgreSQL migration 6 adds the equivalent central tables. PostgreSQL also provides native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
+The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 14 adds Feed Credit wallets, purchases, reservations and an append-only ledger, and migration 15 adds optional supporter accounts and wallet links. PostgreSQL migrations 6 and 7 add the equivalent central tables. PostgreSQL also provides native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
 
 ## Backup and recovery commands
 
@@ -753,8 +779,24 @@ The suite covers all earlier ledger, lifecycle, browser, authorization, safety, 
 
 The existing pages use `js/api-client.js` and `js/event-engine.js` to call this service at the URL configured by `CONFIG.apiBaseUrl`. The website submission now calls `/api/development/website-contributions`; no visual or journey changes were made. Feed requests, Event IDs, queue totals, queue positions, wait estimates, lifecycle states, queue entries, archive entries, and development reset all come from the server. The supporter page tracks its resulting Event through targeted REST reads, and both pages receive real-time state changes through the lifecycle event stream with polling as a fallback.
 
-The browser no longer owns or simulates a feed queue or countdown. The public website uses supporter-safe APIs; the admin page loads full queue and archive information only after its configured development identity is accepted. The website's payment display and behaviour remain simulated, and server-side WEBSITE verification is not a real payment check. Countdown, bell, and dispensing remain simulations. Stripe, social/video providers, real hardware, a managed identity provider, production sessions/broker/certificates, supporter identity across page reloads, multi-process worker leasing, and backup automation are not implemented. The public website was not changed in Phase 7D-2.
+The browser no longer owns or simulates a feed queue or countdown. The public
+website uses supporter-safe APIs; the admin page loads full queue, payment,
+wallet, account and archive information only after its configured development
+identity is accepted. Stripe remains Test Mode only and countdown, bell and
+dispensing remain simulations. Phase 8D adds optional account-linked wallet
+recovery and an Auth0 adapter, but no Auth0 tenant is connected. Social/video
+providers, real hardware, live payments, production sessions/broker/
+certificates, multi-process worker leasing and operational backup automation
+remain unimplemented or unauthorized.
 
 ## Development Summary
 
-Phase 1 established the server boundary, Phases 2–5 made the website lifecycle durable, Phase 6 added resources, queues, Contributions, FeedIntents, and Outbox, Phase 7A added Device Commands, Phase 7B added administrator safety and dual approval, and Phase 7C added the durable simulated controller. Phase 7D-2 now proves the signed MQTT path through an embedded test broker while preserving the in-process transport. Production certificates, broker deployment, physical controllers/hardware, PostgreSQL, multi-instance leasing, and operational backup/recovery remain future work.
+Phase 1 established the server boundary, Phases 2–5 made the website lifecycle
+durable, Phase 6 added resources, queues, Contributions, FeedIntents and the
+Outbox, and Phase 7 added Device Commands, administrator safety, the simulated
+controller and the signed MQTT path. Phase 8A added Stripe Test Mode, Phase 8B
+hardened the local sandbox pilot, Phase 8C separated payment from feeding with
+Feed Credit wallets, and Phase 8D adds optional managed-identity account
+recovery without weakening the guest journey. Production identity, live
+payments, managed PostgreSQL, operational monitoring/backups and physical
+hardware remain gated future work.

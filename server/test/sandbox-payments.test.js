@@ -505,7 +505,9 @@ test("checkout rejects browser-controlled pricing, invalid packs and live settin
     const config = {
         ...testConfig,
         nodeEnv: "production",
-        paymentSandboxEnabled: false
+        paymentSandboxEnabled: false,
+        supporterAuthProvider: "unconfigured",
+        enableDevelopmentSupporterAuthentication: false
     };
     const eventEngine = new EventEngine({
         config,

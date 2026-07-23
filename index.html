@@ -144,6 +144,46 @@
         </p>
     </div>
 
+    <section id="supporter-account" class="supporter-account" aria-labelledby="supporter-account-heading">
+        <div class="wallet-heading-row">
+            <div>
+                <span class="wallet-kicker">Optional account protection</span>
+                <strong id="supporter-account-heading">Use your credits on any device</strong>
+            </div>
+            <span id="supporter-account-status" class="account-status">Checking account…</span>
+        </div>
+        <div id="supporter-account-signed-out">
+            <p>
+                You can keep using Feed Credits as a guest. Sign in or create an
+                account only if you want to protect this wallet across phones,
+                tablets and browsers.
+            </p>
+            <a id="supporter-account-sign-in" class="button" href="#">
+                Sign in or create account
+            </a>
+            <a class="text-button" href="privacy.html">How account privacy works</a>
+        </div>
+        <div id="supporter-account-signed-in" hidden>
+            <p>
+                Signed in as <strong id="supporter-account-email">Supporter</strong>.
+                <span id="supporter-account-wallet-count"></span>
+            </p>
+            <div class="feed-credit-actions">
+                <button id="link-supporter-wallet" class="button" type="button" hidden>
+                    Protect this wallet
+                </button>
+                <button id="export-supporter-account" class="button button-secondary" type="button">
+                    Download my data
+                </button>
+                <a id="supporter-account-logout" class="text-button" href="#">Sign out</a>
+                <button id="delete-supporter-account" class="text-button danger-text" type="button">
+                    Delete account
+                </button>
+            </div>
+        </div>
+        <p id="supporter-account-message" class="account-message" role="status" aria-live="polite"></p>
+    </section>
+
     <form id="wallet-create" class="wallet-create">
         <label for="supporter-name">Your display name</label>
         <div class="wallet-create-row">
@@ -222,6 +262,16 @@
             <strong id="feed-countdown-value">10</strong>
             <span id="feed-countdown-label">seconds</span>
         </div>
+
+        <section class="wallet-history" aria-labelledby="wallet-history-heading">
+            <div class="wallet-heading-row">
+                <div>
+                    <span class="wallet-kicker">Wallet activity</span>
+                    <strong id="wallet-history-heading">Purchases and Feed Credits</strong>
+                </div>
+            </div>
+            <ul id="wallet-history-list" class="wallet-history-list"></ul>
+        </section>
     </div>
 
     <p id="supporter-message" class="supporter-message" role="status" aria-live="polite">
@@ -417,10 +467,10 @@
         </p>
 
     </footer>
-<script src="js/config.js?v=phase-8c-countdown-1"></script>
-<script src="js/api-client.js?v=phase-8c-countdown-1"></script>
-<script src="js/event-engine.js?v=phase-8c-countdown-1"></script>
-<script src="js/payment-gateway.js?v=phase-8c-countdown-1"></script>
-<script src="js/app.js?v=phase-8c-countdown-1"></script>
+<script src="js/config.js?v=phase-8d-1"></script>
+<script src="js/api-client.js?v=phase-8d-1"></script>
+<script src="js/event-engine.js?v=phase-8d-1"></script>
+<script src="js/payment-gateway.js?v=phase-8d-1"></script>
+<script src="js/app.js?v=phase-8d-1"></script>
 </body>
 </html>

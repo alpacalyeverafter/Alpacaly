@@ -35,6 +35,18 @@
         feedCountdownValue: document.getElementById("feed-countdown-value"),
         feedCountdownLabel: document.getElementById("feed-countdown-label"),
         forgetWallet: document.getElementById("forget-wallet"),
+        walletHistory: document.getElementById("wallet-history-list"),
+        accountStatus: document.getElementById("supporter-account-status"),
+        accountSignedOut: document.getElementById("supporter-account-signed-out"),
+        accountSignedIn: document.getElementById("supporter-account-signed-in"),
+        accountSignIn: document.getElementById("supporter-account-sign-in"),
+        accountLogout: document.getElementById("supporter-account-logout"),
+        accountEmail: document.getElementById("supporter-account-email"),
+        accountWalletCount: document.getElementById("supporter-account-wallet-count"),
+        accountMessage: document.getElementById("supporter-account-message"),
+        linkWallet: document.getElementById("link-supporter-wallet"),
+        exportAccount: document.getElementById("export-supporter-account"),
+        deleteAccount: document.getElementById("delete-supporter-account"),
         message: document.getElementById("supporter-message")
     };
 
@@ -51,6 +63,8 @@
     }
 
     let walletToken = window.localStorage.getItem(WALLET_TOKEN_KEY);
+    let accountSession = null;
+    let accountWalletId = null;
     let wallet = null;
     let activeReservation = null;
     let trackedPaymentRequest = null;
@@ -81,6 +95,81 @@
     function setMessage(message, error = false) {
         elements.message.textContent = message;
         elements.message.classList.toggle("supporter-message-error", error);
+    }
+
+    function setAccountMessage(message, error = false) {
+        elements.accountMessage.textContent = message || "";
+        elements.accountMessage.classList.toggle("supporter-message-error", error);
+    }
+
+    function hasWalletAccess() {
+        return Boolean(walletToken || accountWalletId);
+    }
+
+    function walletAccess() {
+        return {
+            walletToken: walletToken || null,
+            walletId: walletToken ? null : accountWalletId
+        };
+    }
+
+    function renderAccount() {
+        const authenticated = accountSession?.authenticated === true;
+        elements.accountSignedOut.hidden = authenticated;
+        elements.accountSignedIn.hidden = !authenticated;
+        elements.accountStatus.textContent = authenticated
+            ? "Protected account"
+            : accountSession?.accountsAvailable === false
+                ? "Guest wallets available"
+                : "Optional";
+        elements.accountSignIn.hidden = accountSession?.accountsAvailable === false;
+        elements.accountSignIn.href =
+            `${apiClient.baseUrl}/api/supporter-accounts/login`;
+        elements.accountLogout.href =
+            `${apiClient.baseUrl}/api/supporter-accounts/logout`;
+        if (!authenticated) {
+            return;
+        }
+        elements.accountEmail.textContent = accountSession.account?.email
+            || accountSession.account?.displayName
+            || "Supporter";
+        const walletCount = accountSession.wallets?.length || 0;
+        elements.accountWalletCount.textContent = walletCount === 1
+            ? "1 wallet is protected."
+            : `${walletCount} wallets are protected.`;
+        elements.linkWallet.hidden = !walletToken;
+    }
+
+    function historyLabel(entry) {
+        const labels = {
+            PURCHASE: "Feed Credits purchased",
+            RESERVATION: "Feed Credit reserved",
+            REDEMPTION: "Feed Credit used",
+            RELEASE: "Feed Credit returned",
+            REFUND_ADJUSTMENT: "Refund adjustment",
+            ADMIN_CORRECTION: "Administrative correction"
+        };
+        return labels[entry.entryType] || formatState(entry.entryType);
+    }
+
+    function renderWalletHistory() {
+        elements.walletHistory.replaceChildren();
+        const entries = wallet?.ledgerEntries || [];
+        if (entries.length === 0) {
+            const item = document.createElement("li");
+            item.textContent = "No wallet activity yet.";
+            elements.walletHistory.append(item);
+            return;
+        }
+        entries.slice(0, 20).forEach(entry => {
+            const item = document.createElement("li");
+            const label = document.createElement("strong");
+            label.textContent = historyLabel(entry);
+            const detail = document.createElement("span");
+            detail.textContent = new Date(entry.createdAt).toLocaleString();
+            item.append(label, detail);
+            elements.walletHistory.append(item);
+        });
     }
 
     function setSubmitting(value) {
@@ -156,7 +245,7 @@
     }
 
     function renderWallet() {
-        const hasWallet = Boolean(wallet && walletToken);
+        const hasWallet = Boolean(wallet && hasWalletAccess());
         elements.walletCreate.hidden = hasWallet;
         elements.walletDashboard.hidden = !hasWallet;
         if (!hasWallet) {
@@ -166,6 +255,7 @@
 
         const balance = wallet.balance || {};
         elements.walletName.textContent = wallet.supporterDisplayName;
+        elements.forgetWallet.hidden = !walletToken;
         elements.creditsAvailable.textContent = String(balance.available || 0);
         elements.creditsReserved.textContent = String(balance.reserved || 0);
         elements.creditsSpent.textContent = String(balance.spent || 0);
@@ -200,6 +290,7 @@
             setMessage(activeReservation.message,
                 activeReservation.status === "OUTCOME_UNKNOWN");
         }
+        renderWalletHistory();
         renderCountdown();
     }
 
@@ -235,6 +326,7 @@
             window.localStorage.setItem(WALLET_TOKEN_KEY, walletToken);
             wallet = response.wallet;
             elements.supporterName.value = "";
+            renderAccount();
             setMessage("Private Feed Credit wallet created on this browser.");
             startWalletPolling();
         } catch (error) {
@@ -245,7 +337,7 @@
     }
 
     async function buyPack(packId) {
-        if (!walletToken || submitting) {
+        if (!hasWalletAccess() || submitting) {
             return;
         }
         setSubmitting(true);
@@ -254,7 +346,7 @@
             const result = await paymentGateway.createCheckoutSession({
                 packId,
                 clientRequestId: requestId("credit-purchase"),
-                walletToken
+                ...walletAccess()
             });
             if (!result?.checkoutUrl) {
                 throw new Error("The sandbox checkout URL was not returned.");
@@ -268,14 +360,14 @@
     }
 
     async function reserveCredit() {
-        if (!walletToken || submitting) {
+        if (!hasWalletAccess() || submitting) {
             return;
         }
         setSubmitting(true);
         try {
             const response = await apiClient.reserveFeedCredit({
                 clientRequestId: requestId("credit-feed"),
-                walletToken
+                ...walletAccess()
             });
             activeReservation = response.reservation;
             setMessage(response.reservation.message);
@@ -289,7 +381,7 @@
 
     async function heartbeat() {
         if (
-            !walletToken
+            !hasWalletAccess()
             || !activeReservation
             || document.visibilityState !== "visible"
             || !["WAITING", "YOUR_TURN", "CONFIRMED"].includes(activeReservation.status)
@@ -300,12 +392,18 @@
             const response = await apiClient.heartbeatFeedCreditReservation(
                 activeReservation.reservationId,
                 walletToken,
-                true
+                true,
+                accountWalletId
             );
             activeReservation = response.reservation;
         } catch (error) {
-            if (error.statusCode === 401) {
+            if (error.statusCode === 401 && walletToken) {
                 forgetWallet(false);
+            } else if (error.statusCode === 401) {
+                accountWalletId = null;
+                wallet = null;
+                setAccountMessage("Your account session has expired. Sign in again.", true);
+                renderWallet();
             }
         }
     }
@@ -319,7 +417,8 @@
             await heartbeat();
             const response = await apiClient.confirmFeedCreditReservation(
                 activeReservation.reservationId,
-                walletToken
+                walletToken,
+                accountWalletId
             );
             activeReservation = response.reservation;
             setMessage(
@@ -342,7 +441,8 @@
         try {
             const response = await apiClient.cancelFeedCreditReservation(
                 activeReservation.reservationId,
-                walletToken
+                walletToken,
+                accountWalletId
             );
             setMessage(response.reservation.message);
             activeReservation = null;
@@ -355,18 +455,21 @@
     }
 
     async function refreshWallet() {
-        if (!walletToken) {
+        if (!hasWalletAccess()) {
             return;
         }
         try {
-            const response = await apiClient.getFeedCreditWallet(walletToken);
+            const response = await apiClient.getFeedCreditWallet(
+                walletToken,
+                accountWalletId
+            );
             wallet = response.wallet;
             renderWallet();
             if (activeReservation?.status === "YOUR_TURN") {
                 void heartbeat();
             }
         } catch (error) {
-            if (error.statusCode === 401) {
+            if (error.statusCode === 401 && walletToken) {
                 forgetWallet(false);
                 setMessage(
                     "This wallet session is no longer valid on this browser. Create a new test wallet.",
@@ -385,7 +488,8 @@
         try {
             const response = await paymentGateway.getPaymentRequest(
                 trackedPaymentRequest.paymentRequestId,
-                walletToken
+                walletToken,
+                accountWalletId
             );
             trackedPaymentRequest = response.paymentRequest;
             elements.paymentStatus.textContent = formatState(
@@ -435,21 +539,128 @@
         }
         window.localStorage.removeItem(WALLET_TOKEN_KEY);
         walletToken = null;
-        wallet = null;
+        const protectedWallet = accountSession?.authenticated
+            ? accountSession.wallets?.[0] || null
+            : null;
+        accountWalletId = protectedWallet?.walletId || null;
+        wallet = protectedWallet;
         activeReservation = null;
         if (walletPollTimer) {
             window.clearInterval(walletPollTimer);
             walletPollTimer = null;
         }
+        renderAccount();
         renderWallet();
+        if (protectedWallet) {
+            setMessage("Your protected account wallet is ready.");
+            startWalletPolling();
+        }
     }
 
     function startWalletPolling() {
-        if (!walletToken || walletPollTimer) {
+        if (!hasWalletAccess() || walletPollTimer) {
             return;
         }
         void refreshWallet();
         walletPollTimer = window.setInterval(() => void refreshWallet(), 1500);
+    }
+
+    async function refreshAccountSession() {
+        try {
+            accountSession = await apiClient.getSupporterAccountSession();
+            apiClient.setSupporterAccountSession(accountSession);
+            if (accountSession.authenticated && !walletToken) {
+                accountWalletId = accountSession.wallets?.[0]?.walletId || null;
+                wallet = accountSession.wallets?.[0] || null;
+            } else if (!accountSession.authenticated) {
+                accountWalletId = null;
+            }
+            renderAccount();
+            renderWallet();
+        } catch (error) {
+            accountSession = { authenticated: false, accountsAvailable: false };
+            apiClient.setSupporterAccountSession(null);
+            renderAccount();
+            setAccountMessage(
+                "Account protection is temporarily unavailable. Guest wallets still work.",
+                true
+            );
+        }
+    }
+
+    async function linkCurrentWallet() {
+        if (!walletToken || !accountSession?.authenticated || submitting) {
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const response = await apiClient.linkSupporterWallet(
+                walletToken,
+                requestId("wallet-link")
+            );
+            accountSession = response.session;
+            apiClient.setSupporterAccountSession(accountSession);
+            accountWalletId = response.walletId;
+            window.localStorage.removeItem(WALLET_TOKEN_KEY);
+            walletToken = null;
+            wallet = accountSession.wallets.find(
+                item => item.walletId === accountWalletId
+            ) || null;
+            setAccountMessage("This wallet is now protected by your account.");
+            renderAccount();
+            renderWallet();
+            startWalletPolling();
+        } catch (error) {
+            setAccountMessage(error.message || "The wallet could not be protected.", true);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    function downloadJson(filename, value) {
+        const blob = new Blob([JSON.stringify(value, null, 2)], {
+            type: "application/json"
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function exportAccount() {
+        try {
+            const response = await apiClient.exportSupporterAccount();
+            downloadJson("alpacaly-supporter-data.json", response.export);
+            setAccountMessage("Your account data download is ready.");
+        } catch (error) {
+            setAccountMessage(error.message || "Your data could not be downloaded.", true);
+        }
+    }
+
+    async function deleteAccount() {
+        if (!window.confirm(
+            "Delete your account? Linked wallets will return to guest recovery and you must save the downloaded recovery file."
+        )) {
+            return;
+        }
+        try {
+            const response = await apiClient.deleteSupporterAccount();
+            if (response.guestWalletRecovery?.length) {
+                downloadJson(
+                    "alpacaly-wallet-recovery-private.json",
+                    response.guestWalletRecovery
+                );
+                const first = response.guestWalletRecovery[0];
+                window.localStorage.setItem(WALLET_TOKEN_KEY, first.recoveryToken);
+            }
+            window.location.assign(
+                `${apiClient.baseUrl}/api/supporter-accounts/logout`
+            );
+        } catch (error) {
+            setAccountMessage(error.message || "The account could not be deleted.", true);
+        }
     }
 
     elements.walletCreate.addEventListener("submit", event => void createWallet(event));
@@ -460,10 +671,14 @@
     elements.confirmFeed.addEventListener("click", () => void confirmFeed());
     elements.cancelReservation.addEventListener("click", () => void cancelReservation());
     elements.forgetWallet.addEventListener("click", () => forgetWallet(true));
+    elements.linkWallet.addEventListener("click", () => void linkCurrentWallet());
+    elements.exportAccount.addEventListener("click", () => void exportAccount());
+    elements.deleteAccount.addEventListener("click", () => void deleteAccount());
     document.addEventListener("visibilitychange", () => {
         renderWallet();
         if (document.visibilityState === "visible") {
             void heartbeat();
+            void refreshAccountSession();
             void refreshWallet();
         }
     });
@@ -471,7 +686,11 @@
 
     presenceTimer = window.setInterval(() => void heartbeat(), 5000);
     void presenceTimer;
+    renderAccount();
     renderWallet();
-    startWalletPolling();
-    startPaymentTracking();
+    void (async () => {
+        await refreshAccountSession();
+        startWalletPolling();
+        startPaymentTracking();
+    })();
 })();

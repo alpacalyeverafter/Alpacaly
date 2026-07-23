@@ -62,6 +62,46 @@ test("configuration rejects non-local payment sandbox URLs", () => {
     );
 });
 
+test("supporter accounts remain optional and development identity requires an explicit flag", () => {
+    const guestConfig = loadConfig({
+        NODE_ENV: "development",
+        DATABASE_PATH: ":memory:"
+    }, { loadEnvFile: false });
+    assert.equal(guestConfig.supporterAuthProvider, "unconfigured");
+
+    assert.throws(
+        () => loadConfig({
+            NODE_ENV: "development",
+            DATABASE_PATH: ":memory:",
+            SUPPORTER_AUTH_PROVIDER: "development"
+        }, { loadEnvFile: false }),
+        /ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION/
+    );
+});
+
+test("Auth0 supporter accounts fail closed without complete managed configuration", () => {
+    assert.throws(
+        () => loadConfig({
+            NODE_ENV: "development",
+            DATABASE_PATH: ":memory:",
+            SUPPORTER_AUTH_PROVIDER: "auth0",
+            AUTH0_ISSUER_BASE_URL: "https://tenant.example.auth0.com",
+            AUTH0_CLIENT_ID: "supporter-client"
+        }, { loadEnvFile: false }),
+        /AUTH0_SESSION_SECRET/
+    );
+    assert.throws(
+        () => loadConfig({
+            NODE_ENV: "production",
+            CENTRAL_DATABASE_TYPE: "postgres",
+            DATABASE_URL: "postgresql://app_user:secret@db.example.com/alpacaly",
+            SUPPORTER_AUTH_PROVIDER: "development",
+            ENABLE_DEVELOPMENT_SUPPORTER_AUTHENTICATION: "true"
+        }, { loadEnvFile: false }),
+        /rejects development supporter authentication/
+    );
+});
+
 test("GET /health reports service health", async () => {
     const response = await request(createTestApp()).get("/health").expect(200);
 
@@ -77,7 +117,7 @@ test("GET /health/ready reports sanitized persistence readiness", async () => {
     assert.equal(response.body.status, "ready");
     assert.deepEqual(response.body.persistence, {
         databaseType: "sqlite",
-        schemaVersion: 14,
+        schemaVersion: 15,
         reachable: true
     });
     assert.equal(response.body.workerCoordination.reachable, true);
@@ -197,7 +237,9 @@ test("production configuration disables all development feed writes", async () =
     const app = createTestApp({
         config: {
             nodeEnv: "production",
-            enableDevelopmentContributionSimulation: true
+            enableDevelopmentContributionSimulation: true,
+            supporterAuthProvider: "unconfigured",
+            enableDevelopmentSupporterAuthentication: false
         }
     });
     const payload = { supporterName: "Production write attempt" };
