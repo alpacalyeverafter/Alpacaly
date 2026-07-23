@@ -148,6 +148,58 @@ test("browser Feed Credit boundary reserves, confirms and cancels through wallet
     )));
 });
 
+test("browser supporter account uses cookie credentials, CSRF and account wallet scope", async () => {
+    const capturedRequests = [];
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        developmentSupporterIdentity: "local-supporter",
+        fetchImpl: async (url, options) => {
+            capturedRequests.push({ url, options });
+            if (url.endsWith("/api/supporter-accounts/session")) {
+                return jsonResponse({
+                    authenticated: true,
+                    csrfToken: "supporter-csrf-token",
+                    wallets: [{ walletId: "wallet-account-1" }]
+                });
+            }
+            return jsonResponse({ wallet: { walletId: "wallet-account-1" } });
+        }
+    });
+
+    const session = await client.getSupporterAccountSession();
+    client.setSupporterAccountSession(session);
+    await client.getFeedCreditWallet(null, "wallet-account-1");
+    await client.reserveFeedCredit({
+        clientRequestId: "account-feed-request-1",
+        walletId: "wallet-account-1"
+    });
+    await client.linkSupporterWallet(
+        "wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890",
+        "account-wallet-link-1"
+    );
+
+    assert.ok(capturedRequests.every(item => (
+        item.options.credentials === "include"
+    )));
+    assert.equal(
+        capturedRequests[0].options.headers["x-development-supporter"],
+        "local-supporter"
+    );
+    assert.equal(capturedRequests[1].options.headers["x-wallet-id"], "wallet-account-1");
+    assert.equal(
+        capturedRequests[2].options.headers["x-alpacaly-csrf"],
+        "supporter-csrf-token"
+    );
+    assert.equal(
+        capturedRequests[3].options.headers.authorization,
+        "Wallet wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890"
+    );
+    assert.equal(
+        capturedRequests[3].options.headers["x-alpacaly-csrf"],
+        "supporter-csrf-token"
+    );
+});
+
 test("browser API client sends only the configured development identity to admin APIs", async () => {
     const capturedRequests = [];
     const client = new AlpacalyApiClient({

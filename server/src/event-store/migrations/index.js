@@ -27,8 +27,9 @@ import {
 } from "./012-disaster-recovery-safety.js";
 import { migration013SandboxPayments } from "./013-sandbox-payments.js";
 import { migration014FeedCreditWallets } from "./014-feed-credit-wallets.js";
+import { migration015SupporterAccounts } from "./015-supporter-accounts.js";
 
-export const EVENT_STORE_SCHEMA_VERSION = 14;
+export const EVENT_STORE_SCHEMA_VERSION = 15;
 
 export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration001InitialSchema,
@@ -44,7 +45,8 @@ export const EVENT_STORE_MIGRATIONS = Object.freeze([
     migration011DistributedWorkerCoordination,
     migration012DisasterRecoverySafety,
     migration013SandboxPayments,
-    migration014FeedCreditWallets
+    migration014FeedCreditWallets,
+    migration015SupporterAccounts
 ]);
 
 function readUserVersion(database) {

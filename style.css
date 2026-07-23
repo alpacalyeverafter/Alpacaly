@@ -333,6 +333,37 @@ p {
     font-size: 16px;
 }
 
+.supporter-account {
+    margin: 0 0 24px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(224, 215, 163, 0.32);
+    border-radius: 14px;
+}
+
+.supporter-account p {
+    color: #d6ddcf;
+}
+
+.account-status {
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: #e9df9d;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.account-message {
+    min-height: 20px;
+    margin: 14px 0 0;
+    color: #d6ddcf;
+}
+
+.danger-text {
+    color: #ffd0c8;
+}
+
 .wallet-create label {
     display: block;
     margin-bottom: 8px;
@@ -551,6 +582,34 @@ p {
     color: #ffd0c8;
 }
 
+.wallet-history {
+    margin-top: 22px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(224, 215, 163, 0.25);
+}
+
+.wallet-history-list {
+    display: grid;
+    gap: 9px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wallet-history-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 13px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 9px;
+    color: #d6ddcf;
+}
+
+.wallet-history-list strong {
+    color: #f5f3e8;
+}
+
 .animal-placeholder {
     display: flex;
     justify-content: center;
@@ -662,6 +721,12 @@ footer p {
     .your-turn {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .wallet-history-list li {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
     }
 
     .wallet-balances,

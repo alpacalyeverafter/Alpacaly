@@ -14,7 +14,39 @@ export function walletTokenFromRequest(req) {
     return match[1];
 }
 
-export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
+export function walletCredentialFromRequest(req, supporterAccountService, {
+    mutation = req.method !== "GET"
+} = {}) {
+    const authorization = String(req.get("authorization") || "").trim();
+    if (authorization) {
+        return walletTokenFromRequest(req);
+    }
+    if (!req.supporterIdentity || !supporterAccountService) {
+        if (req.supporterAuthenticationError) {
+            throw req.supporterAuthenticationError;
+        }
+        throw new ApplicationError("A Feed Credit wallet session is required.", {
+            code: "FEED_CREDIT_WALLET_UNAUTHORIZED",
+            statusCode: 401
+        });
+    }
+    if (mutation) {
+        supporterAccountService.verifyCsrf(
+            req.supporterIdentity,
+            req.get("x-alpacaly-csrf")
+        );
+    }
+    return supporterAccountService.requireWalletAccess(
+        req.supporterIdentity,
+        req.get("x-wallet-id")
+    );
+}
+
+export function createFeedCreditsRouter({
+    feedCreditService,
+    paymentService,
+    supporterAccountService = null
+}) {
     const router = Router();
 
     router.get("/packs", (req, res) => {
@@ -43,7 +75,10 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
     router.get("/wallet", (req, res, next) => {
         try {
             res.status(200).json({
-                wallet: feedCreditService.getWallet(walletTokenFromRequest(req)),
+                wallet: feedCreditService.getWallet(walletCredentialFromRequest(
+                    req,
+                    supporterAccountService
+                )),
                 requestId: req.requestId
             });
         } catch (error) {
@@ -54,7 +89,10 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
     router.post("/checkout-sessions", async (req, res, next) => {
         try {
             const result = await paymentService.createCheckoutSession(req.body, {
-                walletToken: walletTokenFromRequest(req)
+                walletToken: walletCredentialFromRequest(
+                    req,
+                    supporterAccountService
+                )
             });
             res.status(result.duplicate ? 200 : 201).json({
                 sandbox: true,
@@ -75,7 +113,7 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
     router.post("/reservations", (req, res, next) => {
         try {
             const result = feedCreditService.createReservation(
-                walletTokenFromRequest(req),
+                walletCredentialFromRequest(req, supporterAccountService),
                 req.body
             );
             res.status(result.duplicate ? 200 : 202).json({
@@ -93,7 +131,7 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
         try {
             res.status(200).json({
                 reservation: feedCreditService.heartbeat(
-                    walletTokenFromRequest(req),
+                    walletCredentialFromRequest(req, supporterAccountService),
                     req.params.reservationId,
                     req.body
                 ),
@@ -108,7 +146,7 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
         try {
             res.status(202).json({
                 ...feedCreditService.confirm(
-                    walletTokenFromRequest(req),
+                    walletCredentialFromRequest(req, supporterAccountService),
                     req.params.reservationId
                 ),
                 notice:
@@ -124,7 +162,7 @@ export function createFeedCreditsRouter({ feedCreditService, paymentService }) {
         try {
             res.status(200).json({
                 reservation: feedCreditService.cancel(
-                    walletTokenFromRequest(req),
+                    walletCredentialFromRequest(req, supporterAccountService),
                     req.params.reservationId
                 ),
                 requestId: req.requestId

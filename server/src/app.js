@@ -11,6 +11,7 @@ import { createLogger } from "./logging/logger.js";
 import { createErrorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { requestLogger } from "./middleware/request-logger.js";
 import { authenticateAdministrator } from "./middleware/administrator-security.js";
+import { attachSupporterIdentity } from "./middleware/supporter-authentication.js";
 import { createOperatorSafetyServices } from "./operator-safety/index.js";
 import { createPaymentServices } from "./payments/index.js";
 import { createAdministratorRouter } from "./routes/administrator.js";
@@ -24,6 +25,8 @@ import {
 } from "./routes/payments.js";
 import { createResourceQueuesRouter } from "./routes/resource-queues.js";
 import { createFeedCreditsRouter } from "./routes/feed-credits.js";
+import { createSupporterAccountsRouter } from "./routes/supporter-accounts.js";
+import { createSupporterAccountServices } from "./supporter-accounts/index.js";
 
 export function createApp(options = {}) {
     const config = options.config || loadConfig();
@@ -66,6 +69,20 @@ export function createApp(options = {}) {
             config,
             clock: eventEngine.clock
         });
+    const supporterAccountServices = options.supporterAccountServices
+        || createSupporterAccountServices({
+            eventEngine,
+            feedCreditService: paymentServices.feedCreditServices.service,
+            config,
+            clock: eventEngine.clock,
+            provider: options.supporterAuthProvider || null,
+            ...(options.supporterAccountIdGenerator
+                ? { idGenerator: options.supporterAccountIdGenerator }
+                : {}),
+            ...(options.supporterAccountTokenGenerator
+                ? { tokenGenerator: options.supporterAccountTokenGenerator }
+                : {})
+        });
     deviceCommandServices.controllerService
         ?.setAdministratorSecurityServices(administratorSecurityServices);
     const operatorSafetyServices = options.operatorSafetyServices
@@ -99,17 +116,27 @@ export function createApp(options = {}) {
     app.locals.paymentServices = paymentServices;
     app.locals.feedCreditServices = paymentServices.feedCreditServices;
     app.locals.administratorSecurityServices = administratorSecurityServices;
+    app.locals.supporterAccountServices = supporterAccountServices;
     app.locals.operatorSafetyServices = operatorSafetyServices;
     app.locals.recoverySafetyService = eventEngine.recoverySafetyService;
     app.locals.recoveryDiagnosticsService = recoveryDiagnosticsService;
 
     app.use(cors({
         origin: config.corsOrigin,
+        credentials: config.corsOrigin !== "*",
         methods: ["GET", "POST", "OPTIONS"],
-        allowedHeaders: ["content-type", "x-request-id", "authorization"],
+        allowedHeaders: [
+            "content-type",
+            "x-request-id",
+            "authorization",
+            "x-wallet-id",
+            "x-alpacaly-csrf",
+            "x-development-supporter"
+        ],
         exposedHeaders: ["x-request-id"]
     }));
     app.use(requestLogger(logger));
+    app.use(supporterAccountServices.middleware);
     app.use(
         "/api/payments/webhooks/stripe",
         express.raw({
@@ -122,6 +149,7 @@ export function createApp(options = {}) {
         })
     );
     app.use(express.json({ limit: config.requestBodyLimit }));
+    app.use(attachSupporterIdentity(supporterAccountServices.service));
 
     app.use("/health", createHealthRouter({
         config,
@@ -152,11 +180,16 @@ export function createApp(options = {}) {
             contributionLedgerServices.developmentWebsiteContributionService
     }));
     app.use("/api/payments", createPaymentsRouter({
-        paymentService: paymentServices.paymentService
+        paymentService: paymentServices.paymentService,
+        supporterAccountService: supporterAccountServices.service
+    }));
+    app.use("/api/supporter-accounts", createSupporterAccountsRouter({
+        supporterAccountServices
     }));
     app.use("/api/feed-credits", createFeedCreditsRouter({
         feedCreditService: paymentServices.feedCreditServices.service,
-        paymentService: paymentServices.paymentService
+        paymentService: paymentServices.paymentService,
+        supporterAccountService: supporterAccountServices.service
     }));
     app.use("/api/admin", authenticateAdministrator(
         administratorSecurityServices.authenticationService
@@ -168,6 +201,7 @@ export function createApp(options = {}) {
         deviceCommandServices,
         contributionLedgerServices,
         paymentServices,
+        supporterAccountServices,
         operatorSafetyServices,
         recoveryDiagnosticsService
     }));

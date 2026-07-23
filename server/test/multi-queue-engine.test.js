@@ -322,7 +322,7 @@ test("restores multiple isolated queues and resumes each after restart", async t
         resumedEngine.getArchivedSummary(RESOURCES.betaFeederId).map(event => event.eventId),
         [betaFirst.feedRequest.eventId]
     );
-    assert.equal(resumedEngine.eventStore.getSchemaVersion(), 14);
+    assert.equal(resumedEngine.eventStore.getSchemaVersion(), 15);
 
     resumedEngine.close();
 });

@@ -1,13 +1,16 @@
 import { Router } from "express";
-import { walletTokenFromRequest } from "./feed-credits.js";
+import { walletCredentialFromRequest } from "./feed-credits.js";
 
-export function createPaymentsRouter({ paymentService }) {
+export function createPaymentsRouter({ paymentService, supporterAccountService = null }) {
     const router = Router();
 
     router.post("/checkout-sessions", async (req, res, next) => {
         try {
             const result = await paymentService.createCheckoutSession(req.body, {
-                walletToken: walletTokenFromRequest(req)
+                walletToken: walletCredentialFromRequest(
+                    req,
+                    supporterAccountService
+                )
             });
             res.status(result.duplicate ? 200 : 201).json({
                 sandbox: true,
@@ -31,7 +34,11 @@ export function createPaymentsRouter({ paymentService }) {
                 sandbox: true,
                 paymentRequest: paymentService.getOwnedPaymentRequestView(
                     req.params.paymentRequestId,
-                    walletTokenFromRequest(req)
+                    walletCredentialFromRequest(
+                        req,
+                        supporterAccountService,
+                        { mutation: false }
+                    )
                 ),
                 welfareNotice:
                     "A completed payment only adds Feed Credits and does not create a feed request.",

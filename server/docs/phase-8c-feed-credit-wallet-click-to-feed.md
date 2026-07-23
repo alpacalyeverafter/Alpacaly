@@ -1,5 +1,9 @@
 # Phase 8C: Feed Credit Wallet and Click-to-Feed
 
+> Historical implementation note: Phase 8D retains guest recovery-token wallets
+> and adds optional managed supporter accounts for cross-device wallet recovery.
+> Accounts remain optional and do not change the Feed Credit safety lifecycle.
+
 ## Status and safety boundary
 
 Phase 8C replaces the Phase 8A direct payment-to-feed journey with a durable
