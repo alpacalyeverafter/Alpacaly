@@ -2,475 +2,621 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        name="description"
+        content="Watch Alpacaly Ever After's rescue centre and use Feed Credits to request a welfare-controlled alpaca feed."
     >
-
-    <title>Alpacaly Ever After</title>
-
-    <link rel="stylesheet" href="style.css?v=phase-8c-countdown-1">
+    <title>Alpacaly Live | Alpacaly Ever After</title>
+    <link rel="stylesheet" href="style.css?v=homepage-stage-4">
 </head>
 
 <body>
+    <a class="skip-link" href="#live">Skip to Alpacaly Live</a>
 
-    <nav class="navigation">
-        <div class="brand">
-            🦙 Alpacaly Ever After
-        </div>
+    <header class="site-header">
+        <a class="brand" href="#home" aria-label="Alpacaly Ever After home">
+            <span class="brand-mark" aria-hidden="true">AE</span>
+            <span class="brand-copy">
+                <strong>Alpacaly</strong>
+                <span>Ever After</span>
+            </span>
+        </a>
 
-        <div class="navigation-links">
-            <a href="#home">Home</a>
-            <a href="#live">Watch Live</a>
-            <a href="#animals">Meet the Herd</a>
-            <a href="#experiences">Experiences</a>
-            <a href="#support">Support Us</a>
-        </div>
-    </nav>
-
-    <main id="home">
-
-        <section class="hero">
-
-            <img
-                class="hero-image"
-                src="Images/hero.jpg"
-                alt="The rescued alpacas and llamas at Alpacaly Ever After"
-            >
-
-            <div class="hero-content">
-
-                <p class="label">
-                    Rescue. Rehabilitate. Rehome.
-                </p>
-
-                <h1>
-                    Alpacaly Ever After
-                </h1>
-
-                <h2>
-                    Giving rescued alpacas and llamas a safe and permanent home.
-                </h2>
-
-                <p class="introduction">
-                    Watch our animals live, learn their rescue stories
-                    and help support their care from anywhere in the world.
-                </p>
-
-                <div class="button-group">
-
-                    <a class="button" href="#live">
-                        🎥 Watch Live Barn
-                    </a>
-
-                    <a class="button" href="#support">
-                        ❤️ Donate
-                    </a>
-
-                    <a class="button" href="#experiences">
-                        📅 Book an Experience
-                    </a>
-
-                </div>
-
+        <nav class="navigation" aria-label="Main navigation">
+            <div class="navigation-links">
+                <a href="#live">Watch Live</a>
+                <a href="#feed-credit-heading">Feed Credits</a>
+                <a href="#experiences">Today</a>
+                <a href="#animals">Rescue Updates</a>
+                <a href="#support-woolly-army">Support Us</a>
             </div>
+        </nav>
 
-        </section>
+        <a class="header-action" href="#feed-credit-heading">Feed the herd</a>
+    </header>
 
-        <section id="live" class="section">
+    <main id="home" class="control-room">
+        <div class="experience-column">
+            <section id="live" class="live-stage" aria-labelledby="live-heading">
+                <div class="live-visual">
+                    <img
+                        class="live-image"
+                        src="Images/hero.jpg"
+                        alt="The rescued alpacas and llamas at Alpacaly Ever After"
+                    >
+                    <div class="live-shade" aria-hidden="true"></div>
 
-            <p class="label">Project RescueLive</p>
+                    <div class="live-toolbar">
+                        <span class="live-badge is-offline">
+                            <span class="live-indicator" aria-hidden="true"></span>
+                            Camera offline
+                        </span>
+                        <span class="location-chip">The Rescue Barn · Cumbria</span>
+                    </div>
 
-            <h2>
-                Watch the Rescue Barn Live
-            </h2>
+                    <div class="live-activity" aria-label="Current feeding activity">
+                        <span class="live-activity-label">Current feed</span>
+                        <strong id="system-status">Connecting</strong>
+                        <small>Welfare-controlled live status</small>
+                    </div>
 
-            <p>
-                Our live barn will let supporters watch the rescued alpacas
-                and llamas, hear about their care and sponsor scheduled
-                rescue feeds.
-            </p>
+                    <div class="live-caption">
+                        <p class="eyebrow">Alpacaly Live</p>
+                        <h1 id="live-heading">Life at the rescue centre, as it happens.</h1>
+                        <p>
+                            The live camera connection is being prepared. Feed Credits
+                            and the welfare-controlled feeding system remain available in
+                            the local test environment.
+                        </p>
+                    </div>
 
-            <div class="live-placeholder">
+                    <div
+                        id="feed-countdown"
+                        class="feed-countdown"
+                        role="timer"
+                        aria-live="polite"
+                        aria-atomic="true"
+                        hidden
+                    >
+                        <span class="feed-countdown-kicker">Feed begins in</span>
+                        <strong id="feed-countdown-value">10</strong>
+                        <span id="feed-countdown-label">seconds</span>
+                    </div>
 
-                <div class="live-badge">
-                    ● LIVE
+                </div>
+            </section>
+
+            <section class="camera-selector" aria-labelledby="camera-heading">
+                <div class="panel-heading compact-heading">
+                    <div>
+                        <p class="eyebrow">Choose your view</p>
+                        <h2 id="camera-heading">Rescue-centre cameras</h2>
+                    </div>
+                    <span class="availability-note">Connections in preparation</span>
+                </div>
+                <div class="camera-options" aria-label="Camera availability">
+                    <button type="button" class="camera-option camera-option-main" disabled>
+                        <span class="camera-preview" aria-hidden="true"><span>01</span></span>
+                        <span class="camera-option-copy">
+                            <strong>Main Barn</strong>
+                            <small><i aria-hidden="true"></i> Camera offline</small>
+                        </span>
+                    </button>
+                    <button type="button" class="camera-option camera-option-paddock" disabled>
+                        <span class="camera-preview" aria-hidden="true"><span>02</span></span>
+                        <span class="camera-option-copy">
+                            <strong>Herd Paddock</strong>
+                            <small><i aria-hidden="true"></i> Not connected</small>
+                        </span>
+                    </button>
+                    <button type="button" class="camera-option camera-option-care" disabled>
+                        <span class="camera-preview" aria-hidden="true"><span>03</span></span>
+                        <span class="camera-option-copy">
+                            <strong>Care Barn</strong>
+                            <small><i aria-hidden="true"></i> Not connected</small>
+                        </span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="barn-roster-panel" aria-labelledby="barn-roster-heading">
+                <div class="panel-heading compact-heading">
+                    <div>
+                        <p class="eyebrow">Faces from the Woolly Army</p>
+                        <h2 id="barn-roster-heading">Who might you spot in the barn?</h2>
+                    </div>
+                    <a
+                        class="inline-action roster-action"
+                        href="https://alpacalyeverafter.co.uk/product-category/adoption-donation-shoutouts/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >Explore adoption packs <span aria-hidden="true">→</span></a>
                 </div>
 
-                <h3>
-                    Live video coming soon
-                </h3>
+                <p class="barn-roster-intro">
+                    Get to know a few familiar faces. Choose an animal to see the
+                    adoption packs that help fund lifelong care across the herd.
+                </p>
 
+                <div class="animal-profile-row">
+                    <a
+                        class="animal-profile animal-profile-odin"
+                        href="https://alpacalyeverafter.co.uk/product/super-adoption-package/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <img src="Images/team/ellie-odin-scooter.jpg" alt="Odin with Ellie and Scooter">
+                        <span><strong>Odin</strong><small>Choose an adoption pack</small></span>
+                    </a>
+                    <a
+                        class="animal-profile animal-profile-scooter"
+                        href="https://alpacalyeverafter.co.uk/product/super-adoption-package/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <img src="Images/team/ellie-odin-scooter.jpg" alt="Scooter with Ellie and Odin">
+                        <span><strong>Scooter</strong><small>Choose an adoption pack</small></span>
+                    </a>
+                    <a
+                        class="animal-profile"
+                        href="https://alpacalyeverafter.co.uk/product/super-adoption-package/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <img src="Images/herd/gremlin.jpg" alt="Gremlin with a member of the Alpacaly care team">
+                        <span><strong>Gremlin</strong><small>Choose an adoption pack</small></span>
+                    </a>
+                    <a
+                        class="animal-profile"
+                        href="https://alpacalyeverafter.co.uk/product/super-adoption-package/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <img src="Images/herd/mikey.jpg" alt="Mikey with a member of the Alpacaly care team">
+                        <span><strong>Mikey</strong><small>Choose an adoption pack</small></span>
+                    </a>
+                </div>
+            </section>
+
+            <section class="live-status-panel" aria-label="Live feeding status">
+                <div class="queue-status-heading">
+                    <span class="status-label">Live queue</span>
+                    <strong>Feeding availability</strong>
+                </div>
+
+                <div class="compact-stat">
+                    <strong id="feeds-remaining">0</strong>
+                    <span>feeds available</span>
+                </div>
+
+                <div class="compact-stat">
+                    <strong id="queue-position">—</strong>
+                    <span>your queue place</span>
+                </div>
+
+                <div class="wait-stat">
+                    <span class="status-label">Estimated wait</span>
+                    <strong id="estimated-wait">—</strong>
+                </div>
+            </section>
+
+            <section class="feed-credit-panel" aria-labelledby="feed-credit-heading">
+                <div class="panel-heading feed-credit-intro">
+                    <div>
+                        <p class="eyebrow">Be here for the moment</p>
+                        <h2 id="feed-credit-heading">Feed the alpacas</h2>
+                    </div>
+                    <span class="environment-chip">Stripe Test Mode</span>
+                </div>
+
+                <p class="feed-intro-copy">
+                    Buy Feed Credits first, then use one when you are ready to watch.
+                    Payment never starts the countdown. Every feed remains subject to
+                    welfare, timing and safety controls.
+                </p>
+
+                <ol class="feed-process" aria-label="How Feed Credits work">
+                    <li><span>01</span><strong>Buy credits</strong><small>Payment adds to your wallet</small></li>
+                    <li><span>02</span><strong>Join the queue</strong><small>One credit is safely reserved</small></li>
+                    <li><span>03</span><strong>Confirm your turn</strong><small>The countdown starts only when ready</small></li>
+                </ol>
+
+                <p id="supporter-message" class="supporter-message" role="status" aria-live="polite">
+                    Create or recover your private Feed Credit wallet to begin.
+                </p>
+
+                <form id="wallet-create" class="wallet-create">
+                    <label for="supporter-name">Your display name</label>
+                    <div class="wallet-create-row">
+                        <input
+                            id="supporter-name"
+                            type="text"
+                            maxlength="80"
+                            autocomplete="name"
+                            placeholder="How should we welcome you?"
+                            required
+                        >
+                        <button id="create-wallet" class="button" type="submit">
+                            Create private wallet
+                        </button>
+                    </div>
+                </form>
+
+                <div id="wallet-dashboard" class="wallet-dashboard" hidden>
+                    <div class="wallet-heading-row">
+                        <div>
+                            <span class="wallet-kicker">Your Feed Credit wallet</span>
+                            <strong id="wallet-name">Supporter</strong>
+                        </div>
+                        <button id="forget-wallet" class="text-button" type="button">
+                            Forget on this browser
+                        </button>
+                    </div>
+
+                    <div class="wallet-balances" aria-label="Feed Credit balance">
+                        <div>
+                            <strong id="credits-available">0</strong>
+                            <span>Available</span>
+                        </div>
+                        <div>
+                            <strong id="credits-reserved">0</strong>
+                            <span>Reserved</span>
+                        </div>
+                        <div>
+                            <strong id="credits-spent">0</strong>
+                            <span>Used</span>
+                        </div>
+                    </div>
+
+                    <div class="purchase-section">
+                        <div class="subsection-heading">
+                            <div>
+                                <span class="wallet-kicker">Buy credits</span>
+                                <strong>Choose a Feed Credit pack</strong>
+                            </div>
+                            <span class="payment-state">
+                                Payment: <strong id="payment-status">Sandbox ready</strong>
+                            </span>
+                        </div>
+
+                        <div class="credit-pack-grid" aria-label="Buy Feed Credits">
+                            <button class="credit-pack" data-pack-id="feed_credit_1" type="button">
+                                <span>One moment</span><strong>£5</strong><small>1 Feed Credit</small>
+                            </button>
+                            <button class="credit-pack featured-pack" data-pack-id="feed_credit_3" type="button">
+                                <span>Woolly favourite</span><strong>£15</strong><small>3 Feed Credits</small>
+                            </button>
+                            <button class="credit-pack" data-pack-id="feed_credit_5" type="button">
+                                <span>Five moments</span><strong>£25</strong><small>5 Feed Credits</small>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="feed-credit-actions">
+                        <button id="use-credit" class="button primary-feed-action" type="button">
+                            Use 1 Feed Credit
+                        </button>
+                        <button id="cancel-reservation" class="button button-secondary" type="button" hidden>
+                            Cancel request
+                        </button>
+                    </div>
+
+                    <div id="your-turn" class="your-turn" hidden>
+                        <span class="live-dot" aria-hidden="true"></span>
+                        <div>
+                            <strong>Your turn to feed</strong>
+                            <p>Stay on this page and confirm when you are ready to watch.</p>
+                        </div>
+                        <button id="confirm-feed" class="button" type="button">
+                            Start my countdown
+                        </button>
+                    </div>
+
+                    <details class="wallet-history">
+                        <summary>
+                            <span>
+                                <span class="wallet-kicker">Private activity</span>
+                                <strong id="wallet-history-heading">Purchases and Feed Credits</strong>
+                            </span>
+                            <span aria-hidden="true">View history</span>
+                        </summary>
+                        <ul id="wallet-history-list" class="wallet-history-list"></ul>
+                    </details>
+                </div>
+
+                <details class="technical-details">
+                    <summary>Technical details</summary>
+                    <span id="event-id">Event ID: —</span>
+                </details>
+
+                <section id="supporter-account" class="supporter-account" aria-labelledby="supporter-account-heading">
+                    <div class="wallet-heading-row">
+                        <div>
+                            <span class="wallet-kicker">Optional account protection</span>
+                            <strong id="supporter-account-heading">Keep credits safe across devices</strong>
+                        </div>
+                        <span id="supporter-account-status" class="account-status">Checking account…</span>
+                    </div>
+
+                    <div id="supporter-account-signed-out">
+                        <p>
+                            Guest wallets still work. Sign in only if you want to protect
+                            this wallet across phones, tablets and browsers.
+                        </p>
+                        <div class="account-actions">
+                            <a id="supporter-account-sign-in" class="button button-secondary" href="#">
+                                Sign in or create account
+                            </a>
+                            <a class="text-button" href="privacy.html">Account privacy</a>
+                        </div>
+                    </div>
+
+                    <div id="supporter-account-signed-in" hidden>
+                        <p>
+                            Signed in as <strong id="supporter-account-email">Supporter</strong>.
+                            <span id="supporter-account-wallet-count"></span>
+                        </p>
+                        <div class="account-actions">
+                            <button id="link-supporter-wallet" class="button" type="button" hidden>
+                                Protect this wallet
+                            </button>
+                            <button id="export-supporter-account" class="button button-secondary" type="button">
+                                Download my data
+                            </button>
+                            <a id="supporter-account-logout" class="text-button" href="#">Sign out</a>
+                            <button id="delete-supporter-account" class="text-button danger-text" type="button">
+                                Delete account
+                            </button>
+                        </div>
+                    </div>
+
+                    <p id="supporter-account-message" class="account-message" role="status" aria-live="polite"></p>
+                </section>
+            </section>
+
+            <section class="replay-panel" aria-labelledby="replay-heading">
+                <div class="replay-art" aria-hidden="true">
+                    <span class="replay-state">No clip recorded</span>
+                    <span class="replay-play">▶</span>
+                </div>
+                <div class="replay-copy">
+                    <p class="eyebrow">Instant replay</p>
+                    <h2 id="replay-heading">Relive the latest feed</h2>
+                    <p>
+                        Replay clips will appear here after the camera system is connected.
+                        No video replay is currently available.
+                    </p>
+                    <div class="replay-meta" aria-label="Replay status">
+                        <span>Camera offline</span>
+                        <span>Replay unavailable</span>
+                    </div>
+                </div>
+            </section>
+
+            <section id="animals" class="rescue-welfare-grid" aria-label="Rescue and welfare updates">
+                <article class="story-card rescue-card">
+                    <div class="story-image-wrap">
+                        <img src="Images/hero.jpg" alt="Members of the rescued Alpacaly herd">
+                    </div>
+                    <div class="story-copy">
+                        <p class="eyebrow">Latest from the herd</p>
+                        <h2>A permanent home, built around their needs.</h2>
+                        <p>
+                            Every animal has an individual story. New rescue updates will
+                            be published here only after they are confirmed by the care team.
+                        </p>
+                    </div>
+                </article>
+
+                <article class="story-card welfare-card">
+                    <p class="eyebrow">Welfare first</p>
+                    <h2>Every feed is measured and supervised.</h2>
+                    <p>
+                        Feed requests remain limited by the care team, feeding windows,
+                        emergency stops and the current condition of the herd.
+                    </p>
+                    <ul class="welfare-list">
+                        <li>Measured portions</li>
+                        <li>Daily welfare limits</li>
+                        <li>Care-team control</li>
+                    </ul>
+                    <p class="care-team-note">
+                        The care team always has the final say over whether a feed proceeds.
+                    </p>
+                </article>
+            </section>
+        </div>
+
+        <aside class="dashboard-sidebar" aria-label="Rescue centre dashboard">
+            <section class="dashboard-card herd-card" aria-labelledby="herd-heading">
+                <div class="card-topline">
+                    <p class="eyebrow">The herd</p>
+                    <span class="olive-dot" aria-hidden="true"></span>
+                </div>
+                <h2 id="herd-heading">Alpacas and llamas rescued by us so far</h2>
+                <div class="herd-breakdown" aria-label="Animals rescued so far">
+                    <span><strong>200</strong><small>alpacas</small></span>
+                    <span><strong>80</strong><small>llamas</small></span>
+                </div>
+                <p class="herd-total-line"><strong>280</strong> lives welcomed into the Woolly Army.</p>
+            </section>
+
+            <section id="experiences" class="dashboard-card programme-card" aria-labelledby="programme-heading">
+                <div class="card-topline">
+                    <div>
+                        <p class="eyebrow">At the rescue today</p>
+                        <h2 id="programme-heading">Today’s programme</h2>
+                    </div>
+                    <span class="programme-day">Today</span>
+                </div>
+
+                <ol class="programme-list">
+                    <li>
+                        <span class="programme-time">Now</span>
+                        <span><strong>Rescue Barn</strong><small>Camera connection in preparation</small></span>
+                    </li>
+                    <li>
+                        <span class="programme-time">12:00</span>
+                        <span><strong>Welfare-led feeding</strong><small>Only when approved by the care team</small></span>
+                        <button
+                            class="reminder-button"
+                            type="button"
+                            data-reminder-title="Alpacaly welfare-led feeding"
+                            data-reminder-time="12:00"
+                            data-reminder-duration="30"
+                        >Remind me</button>
+                    </li>
+                    <li>
+                        <span class="programme-time">Updates</span>
+                        <span><strong>Stories from the herd</strong><small>Published after care-team confirmation</small></span>
+                    </li>
+                </ol>
+                <p id="programme-reminder-status" class="programme-reminder-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="dashboard-card care-today-card" aria-labelledby="care-today-heading">
+                <div class="care-today-photo">
+                    <img src="Images/team/ellie-odin-scooter.jpg" alt="Ellie with Odin and Scooter">
+                    <span>Today’s care lead</span>
+                </div>
+                <div class="care-today-copy">
+                    <p class="eyebrow">Meet the care team</p>
+                    <h2 id="care-today-heading">Who’s looking after the Woolly Army today?</h2>
+                    <strong>Ellie · Team Coordinator</strong>
+                    <p>
+                        Animal welfare is Ellie’s passion. She helps make sure every
+                        member of the Woolly Army receives calm, individual care.
+                    </p>
+                </div>
+            </section>
+
+            <section class="dashboard-card coming-up-card" aria-labelledby="coming-up-heading">
+                <p class="eyebrow">Coming up next</p>
+                <h2 id="coming-up-heading">The next safe feed</h2>
                 <p>
-                    The camera and safe feeding system are currently being built.
+                    A feed begins only when a supporter reaches the front of the queue,
+                    keeps this page visible and confirms their turn.
                 </p>
+                <a class="inline-action" href="#feed-credit-heading">View Feed Credits <span aria-hidden="true">→</span></a>
+            </section>
 
-            </div>
-
-            <div class="status-grid">
-
-    <div class="status-card">
-        <strong id="feeds-remaining">0</strong>
-        <span>Feed sponsorships available</span>
-    </div>
-
-    <div class="status-card">
-        <strong id="queue-position">—</strong>
-        <span id="estimated-wait">Estimated wait: —</span>
-    </div>
-
-    <div class="status-card">
-        <strong id="system-status">Ready</strong>
-        <span id="event-id">Event ID: —</span>
-    </div>
-
-    <div class="status-card">
-        <strong id="payment-status">Sandbox ready</strong>
-        <span>Payment status</span>
-    </div>
-
-</div>
-
-<section class="feed-credit-panel" aria-labelledby="feed-credit-heading">
-    <div class="feed-credit-intro">
-        <p class="label">Stripe Test Mode</p>
-        <h3 id="feed-credit-heading">Feed Credits</h3>
-        <p>
-            Buy credits first, then use one when you are here to watch.
-            Buying credits never starts the countdown. A credit gives you the
-            right to request a feed; welfare and operational controls still decide
-            whether and when a dispense can occur.
-        </p>
-    </div>
-
-    <section id="supporter-account" class="supporter-account" aria-labelledby="supporter-account-heading">
-        <div class="wallet-heading-row">
-            <div>
-                <span class="wallet-kicker">Optional account protection</span>
-                <strong id="supporter-account-heading">Use your credits on any device</strong>
-            </div>
-            <span id="supporter-account-status" class="account-status">Checking account…</span>
-        </div>
-        <div id="supporter-account-signed-out">
-            <p>
-                You can keep using Feed Credits as a guest. Sign in or create an
-                account only if you want to protect this wallet across phones,
-                tablets and browsers.
-            </p>
-            <a id="supporter-account-sign-in" class="button" href="#">
-                Sign in or create account
-            </a>
-            <a class="text-button" href="privacy.html">How account privacy works</a>
-        </div>
-        <div id="supporter-account-signed-in" hidden>
-            <p>
-                Signed in as <strong id="supporter-account-email">Supporter</strong>.
-                <span id="supporter-account-wallet-count"></span>
-            </p>
-            <div class="feed-credit-actions">
-                <button id="link-supporter-wallet" class="button" type="button" hidden>
-                    Protect this wallet
-                </button>
-                <button id="export-supporter-account" class="button button-secondary" type="button">
-                    Download my data
-                </button>
-                <a id="supporter-account-logout" class="text-button" href="#">Sign out</a>
-                <button id="delete-supporter-account" class="text-button danger-text" type="button">
-                    Delete account
-                </button>
-            </div>
-        </div>
-        <p id="supporter-account-message" class="account-message" role="status" aria-live="polite"></p>
-    </section>
-
-    <form id="wallet-create" class="wallet-create">
-        <label for="supporter-name">Your display name</label>
-        <div class="wallet-create-row">
-            <input
-                id="supporter-name"
-                type="text"
-                maxlength="80"
-                autocomplete="name"
-                placeholder="Supporter name"
-                required
-            >
-            <button id="create-wallet" class="button" type="submit">
-                Create private wallet
-            </button>
-        </div>
-    </form>
-
-    <div id="wallet-dashboard" class="wallet-dashboard" hidden>
-        <div class="wallet-heading-row">
-            <div>
-                <span class="wallet-kicker">Your private wallet</span>
-                <strong id="wallet-name">Supporter</strong>
-            </div>
-            <button id="forget-wallet" class="text-button" type="button">
-                Forget this wallet on this browser
-            </button>
-        </div>
-
-        <div class="wallet-balances" aria-label="Feed Credit balance">
-            <div><strong id="credits-available">0</strong><span>Available</span></div>
-            <div><strong id="credits-reserved">0</strong><span>Reserved</span></div>
-            <div><strong id="credits-spent">0</strong><span>Spent</span></div>
-        </div>
-
-        <div class="credit-pack-grid" aria-label="Buy Feed Credits">
-            <button class="credit-pack" data-pack-id="feed_credit_1" type="button">
-                <strong>£5</strong><span>1 Feed Credit</span>
-            </button>
-            <button class="credit-pack" data-pack-id="feed_credit_3" type="button">
-                <strong>£15</strong><span>3 Feed Credits</span>
-            </button>
-            <button class="credit-pack" data-pack-id="feed_credit_5" type="button">
-                <strong>£25</strong><span>5 Feed Credits</span>
-            </button>
-        </div>
-
-        <div class="feed-credit-actions">
-            <button id="use-credit" class="button" type="button">
-                Use 1 Feed Credit
-            </button>
-            <button id="cancel-reservation" class="button button-secondary" type="button" hidden>
-                Cancel request
-            </button>
-        </div>
-
-        <div id="your-turn" class="your-turn" hidden>
-            <span class="live-dot" aria-hidden="true"></span>
-            <div>
-                <strong>Your turn</strong>
-                <p>Keep this page active, then confirm to start the 10-second countdown.</p>
-            </div>
-            <button id="confirm-feed" class="button" type="button">
-                Start my countdown
-            </button>
-        </div>
-
-        <div
-            id="feed-countdown"
-            class="feed-countdown"
-            role="timer"
-            aria-live="polite"
-            aria-atomic="true"
-            hidden
-        >
-            <span class="feed-countdown-kicker">Feed begins in</span>
-            <strong id="feed-countdown-value">10</strong>
-            <span id="feed-countdown-label">seconds</span>
-        </div>
-
-        <section class="wallet-history" aria-labelledby="wallet-history-heading">
-            <div class="wallet-heading-row">
-                <div>
-                    <span class="wallet-kicker">Wallet activity</span>
-                    <strong id="wallet-history-heading">Purchases and Feed Credits</strong>
-                </div>
-            </div>
-            <ul id="wallet-history-list" class="wallet-history-list"></ul>
-        </section>
-    </div>
-
-    <p id="supporter-message" class="supporter-message" role="status" aria-live="polite">
-        Create or recover your private Feed Credit wallet to begin.
-    </p>
-</section>
-
-        </section>
-
-        <section id="animals" class="section alternate">
-
-            <p class="label">Meet the Residents</p>
-
-            <h2>
-                Meet the Herd
-            </h2>
-
-            <p>
-                Every animal has a different story and personality.
-                These profiles can later contain photographs,
-                rescue histories and sponsorship information.
-            </p>
-
-            <div class="card-grid">
-
-                <article class="animal-card">
-                    <div class="animal-placeholder">
-                        🦙
+            <section class="dashboard-card army-card" aria-labelledby="army-heading">
+                <div class="card-topline">
+                    <div>
+                        <p class="eyebrow gold-eyebrow">Woolly Army</p>
+                        <h2 id="army-heading">Supporter activity</h2>
                     </div>
-
-                    <h3>Malcolm</h3>
-
-                    <p>
-                        Confident, curious and usually first to investigate
-                        anything new.
-                    </p>
-                </article>
-
-                <article class="animal-card">
-                    <div class="animal-placeholder">
-                        🦙
-                    </div>
-
-                    <h3>Honey</h3>
-
-                    <p>
-                        Calm, gentle and happiest when standing quietly
-                        with the herd.
-                    </p>
-                </article>
-
-                <article class="animal-card">
-                    <div class="animal-placeholder">
-                        🦙
-                    </div>
-
-                    <h3>Boo</h3>
-
-                    <p>
-                        A soft-natured llama with plenty of character
-                        and a very memorable face.
-                    </p>
-                </article>
-
-            </div>
-
-        </section>
-
-        <section id="experiences" class="section">
-
-            <p class="label">Visit Us</p>
-
-            <h2>
-                Experiences at Alpacaly Ever After
-            </h2>
-
-            <div class="card-grid">
-
-                <article class="feature-card">
-
-                    <h3>
-                        Alpaca Meet and Greet
-                    </h3>
-
-                    <p>
-                        Meet the animals, learn about their care
-                        and hear their individual rescue stories.
-                    </p>
-
-                    <a class="text-link" href="#">
-                        Booking link coming soon
-                    </a>
-
-                </article>
-
-                <article class="feature-card">
-
-                    <h3>
-                        Walk With Alpacas
-                    </h3>
-
-                    <p>
-                        Enjoy the Lake District while spending time
-                        with some of our rescued residents.
-                    </p>
-
-                    <a class="text-link" href="#">
-                        Booking link coming soon
-                    </a>
-
-                </article>
-
-                <article class="feature-card">
-
-                    <h3>
-                        Basecamp North Lakes
-                    </h3>
-
-                    <p>
-                        Visit the farm shop and discover more
-                        experiences, food and local products.
-                    </p>
-
-                    <a class="text-link" href="#">
-                        Website link coming soon
-                    </a>
-
-                </article>
-
-            </div>
-
-        </section>
-
-        <section id="support" class="section support-section">
-
-            <p class="label">
-                Help the Rescue
-            </p>
-
-            <h2>
-                Support Rescued Alpacas and Llamas
-            </h2>
-
-            <p>
-                Donations help cover feed, shelter, veterinary care,
-                transport and the daily running of the rescue centre.
-            </p>
-
-            <div class="donation-options">
-
-                <div class="donation-card">
-                    <strong>£2</strong>
-                    <span>Small contribution</span>
+                    <span class="army-mark" aria-hidden="true">✦</span>
                 </div>
-
-                <div class="donation-card">
-                    <strong>£5</strong>
-                    <span>Support daily care</span>
+                <p>
+                    Feed Credits fund a moment of connection while every request remains
+                    under the control of Alpacaly’s welfare systems.
+                </p>
+                <div class="supporter-signal-grid" aria-label="Supporter safeguards">
+                    <span><strong>Private</strong><small>Wallet activity</small></span>
+                    <span><strong>Protected</strong><small>Queue position</small></span>
                 </div>
-
-                <div class="donation-card">
-                    <strong>£10</strong>
-                    <span>Rescue supporter</span>
+                <div class="privacy-note">
+                    <strong>Supporter privacy protected</strong>
+                    <span>Names are never shown publicly without an opt-in system.</span>
                 </div>
+            </section>
 
-            </div>
+            <section class="dashboard-card latest-supporters" aria-labelledby="supporters-heading">
+                <p class="eyebrow">Latest supporters</p>
+                <h2 id="supporters-heading">Private by default</h2>
+                <p>
+                    Public supporter names are not available in the current safe API.
+                    Your own activity remains visible inside your private wallet.
+                </p>
+                <a class="inline-action" href="#feed-credit-heading">Open your wallet <span aria-hidden="true">→</span></a>
+            </section>
 
-            <a class="button button-light" href="#">
-                ❤️ Donation page coming soon
-            </a>
-
-            <p class="welfare-note">
-                All feeds will be measured, limited and managed by the
-                Alpacaly Ever After animal care team.
-            </p>
-
-        </section>
-
+            <section id="support" class="dashboard-card promise-card" aria-labelledby="promise-heading">
+                <p class="eyebrow gold-eyebrow">The Forever Promise</p>
+                <h2 id="promise-heading">Safety, dignity and a permanent home.</h2>
+                <p>
+                    Every Alpacaly animal deserves lifelong care shaped around their
+                    individual needs—not the demands of a screen.
+                </p>
+                <a class="promise-action" href="#animals">Meet the rescue mission</a>
+            </section>
+        </aside>
     </main>
 
-    <footer>
+    <section id="support-woolly-army" class="support-feature" aria-labelledby="support-woolly-army-heading">
+        <div class="support-feature-copy">
+            <p class="eyebrow gold-eyebrow">Stand with the Woolly Army</p>
+            <h2 id="support-woolly-army-heading">Help fund care, food and a home for life.</h2>
+            <p>
+                Every contribution supports the rescue centre’s work—from daily feed
+                and welfare care to adoption packs and community experiences.
+            </p>
+            <a
+                class="button support-donate-button"
+                href="https://alpacalyeverafter.co.uk/support-the-woolly-army/"
+                target="_blank"
+                rel="noopener noreferrer"
+            >Donate to the Woolly Army</a>
+        </div>
 
-        <strong>
-            Alpacaly Ever After
-        </strong>
+        <div class="support-paths" aria-label="Ways to support Alpacaly Ever After">
+            <a
+                href="https://alpacalyeverafter.co.uk/product-category/adoption-donation-shoutouts/"
+                target="_blank"
+                rel="noopener noreferrer"
+            ><span>01</span><strong>Donate feed</strong><small>Help with daily food and care</small></a>
+            <a
+                href="https://alpacalyeverafter.co.uk/product/super-adoption-package/"
+                target="_blank"
+                rel="noopener noreferrer"
+            ><span>02</span><strong>Adopt a favourite</strong><small>Choose a personal adoption pack</small></a>
+            <a
+                href="https://alpacalyeverafter.co.uk/support-the-woolly-army/"
+                target="_blank"
+                rel="noopener noreferrer"
+            ><span>03</span><strong>Give monthly</strong><small>Provide steady, ongoing support</small></a>
+            <p class="support-privacy-note">
+                Supporter names and donation rankings stay private unless people
+                explicitly choose to be recognised.
+            </p>
+        </div>
 
-        <p>
-            Alpaca and llama rescue in Cumbria.
-        </p>
+        <div class="social-panel">
+            <div>
+                <p class="eyebrow">Follow the rescue</p>
+                <h3>More Woolly Army, every day.</h3>
+            </div>
+            <nav class="social-links" aria-label="Alpacaly Ever After social media">
+                <a href="https://www.instagram.com/alpacalyeverafter" target="_blank" rel="noopener noreferrer"><span>IG</span>Instagram</a>
+                <a href="https://www.tiktok.com/@alpacalyeverafter" target="_blank" rel="noopener noreferrer"><span>TT</span>TikTok</a>
+                <a href="https://www.facebook.com/AlpacalyEverAfter" target="_blank" rel="noopener noreferrer"><span>FB</span>Facebook</a>
+                <a href="https://www.youtube.com/c/alpacalyeverafter" target="_blank" rel="noopener noreferrer"><span>YT</span>YouTube</a>
+            </nav>
+        </div>
+    </section>
 
-        <p>
-            © 2026 Alpacaly Ever After
-        </p>
-
+    <footer class="site-footer">
+        <div>
+            <strong>Alpacaly Ever After</strong>
+            <span>Alpaca and llama rescue in Cumbria</span>
+        </div>
+        <p>© 2026 Alpacaly Ever After</p>
     </footer>
-<script src="js/config.js?v=phase-8d-1"></script>
-<script src="js/api-client.js?v=phase-8d-1"></script>
-<script src="js/event-engine.js?v=phase-8d-1"></script>
-<script src="js/payment-gateway.js?v=phase-8d-1"></script>
-<script src="js/app.js?v=phase-8d-1"></script>
+
+    <nav class="mobile-navigation" aria-label="Mobile navigation">
+        <a href="#live"><span aria-hidden="true">●</span>Live</a>
+        <a href="#feed-credit-heading"><span aria-hidden="true">＋</span>Feed</a>
+        <a href="#experiences"><span aria-hidden="true">◷</span>Today</a>
+        <a href="#support-woolly-army"><span aria-hidden="true">♥</span>Support</a>
+    </nav>
+
+    <script src="js/config.js?v=phase-8d-1"></script>
+    <script src="js/api-client.js?v=phase-8d-1"></script>
+    <script src="js/event-engine.js?v=phase-8d-1"></script>
+    <script src="js/payment-gateway.js?v=phase-8d-1"></script>
+    <script src="js/app.js?v=phase-8d-1"></script>
+    <script src="js/homepage-experience.js?v=homepage-stage-4"></script>
 </body>
 </html>
