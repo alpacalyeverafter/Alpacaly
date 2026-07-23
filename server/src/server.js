@@ -31,6 +31,7 @@ async function shutdown(signal) {
 
     try {
         app.locals.contributionLedgerServices.outboxWorker.stop();
+        app.locals.feedCreditServices.service.stop();
         await app.locals.deviceCommandServices.worker.stop();
         await app.locals.eventEngine.shutdown();
     } catch (error) {

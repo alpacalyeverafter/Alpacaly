@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alpacaly Admin Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=phase-8c-1">
 </head>
 <body>
     <nav class="navigation">
@@ -91,6 +91,15 @@
         </section>
 
         <section class="section alternate" style="margin-top: 24px; border-radius: 16px; text-align: left;">
+            <div class="label">Feed Credit Wallets and Ledger</div>
+            <p style="max-width: 1100px; margin: 8px auto 0;">
+                Purchases, reservations, redemptions, releases, refund adjustments,
+                exceptions and linked Event IDs. Recovery tokens are never displayed.
+            </p>
+            <ul id="feed-credit-activity-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 20px auto 0;"></ul>
+        </section>
+
+        <section class="section alternate" style="margin-top: 24px; border-radius: 16px; text-align: left;">
             <div class="label">Recent Feed History</div>
             <ul id="feed-history-list" class="card-grid" style="display: block; list-style: none; padding: 0; max-width: 1100px; margin: 20px auto 0;"></ul>
         </section>
@@ -113,10 +122,10 @@
         </section>
     </main>
 
-    <script src="js/config.js"></script>
-    <script src="js/api-client.js"></script>
-    <script src="js/event-engine.js"></script>
-    <script src="js/payment-gateway.js"></script>
-    <script src="js/admin.js"></script>
+    <script src="js/config.js?v=phase-8c-1"></script>
+    <script src="js/api-client.js?v=phase-8c-1"></script>
+    <script src="js/event-engine.js?v=phase-8c-1"></script>
+    <script src="js/payment-gateway.js?v=phase-8c-1"></script>
+    <script src="js/admin.js?v=phase-8c-1"></script>
 </body>
 </html>

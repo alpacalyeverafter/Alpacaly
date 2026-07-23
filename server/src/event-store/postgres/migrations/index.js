@@ -11,15 +11,17 @@ import {
     migration004DisasterRecoverySafety
 } from "./004-disaster-recovery-safety.js";
 import { migration005SandboxPayments } from "./005-sandbox-payments.js";
+import { migration006FeedCreditWallets } from "./006-feed-credit-wallets.js";
 
-export const POSTGRES_SCHEMA_VERSION = 5;
+export const POSTGRES_SCHEMA_VERSION = 6;
 
 export const POSTGRES_MIGRATIONS = Object.freeze([
     migration001CentralSchema,
     migration002DistributedWorkerCoordination,
     migration003RelationalSafetyGuards,
     migration004DisasterRecoverySafety,
-    migration005SandboxPayments
+    migration005SandboxPayments,
+    migration006FeedCreditWallets
 ]);
 
 function checksum(sql) {

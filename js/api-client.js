@@ -64,13 +64,67 @@
         createSandboxCheckoutSession(paymentRequest) {
             return this.request("/api/payments/checkout-sessions", {
                 method: "POST",
-                body: paymentRequest
+                body: paymentRequest,
+                walletToken: paymentRequest.walletToken
             });
         }
 
-        getPaymentRequest(paymentRequestId) {
+        listFeedCreditPacks() {
+            return this.request("/api/feed-credits/packs");
+        }
+
+        createFeedCreditWallet(supporterName) {
+            return this.request("/api/feed-credits/wallets", {
+                method: "POST",
+                body: { supporterName }
+            });
+        }
+
+        getFeedCreditWallet(walletToken) {
+            return this.request("/api/feed-credits/wallet", { walletToken });
+        }
+
+        createFeedCreditCheckout({ packId, clientRequestId, walletToken }) {
+            return this.request("/api/feed-credits/checkout-sessions", {
+                method: "POST",
+                body: { packId, clientRequestId },
+                walletToken
+            });
+        }
+
+        reserveFeedCredit({ clientRequestId, walletToken }) {
+            return this.request("/api/feed-credits/reservations", {
+                method: "POST",
+                body: { clientRequestId },
+                walletToken
+            });
+        }
+
+        heartbeatFeedCreditReservation(reservationId, walletToken, active = true) {
             return this.request(
-                `/api/payments/requests/${encodeURIComponent(paymentRequestId)}`
+                `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/presence`,
+                { method: "POST", body: { active }, walletToken }
+            );
+        }
+
+        confirmFeedCreditReservation(reservationId, walletToken) {
+            return this.request(
+                `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/confirm`,
+                { method: "POST", body: {}, walletToken }
+            );
+        }
+
+        cancelFeedCreditReservation(reservationId, walletToken) {
+            return this.request(
+                `/api/feed-credits/reservations/${encodeURIComponent(reservationId)}/cancel`,
+                { method: "POST", body: {}, walletToken }
+            );
+        }
+
+        getPaymentRequest(paymentRequestId, walletToken = null) {
+            return this.request(
+                `/api/payments/requests/${encodeURIComponent(paymentRequestId)}`,
+                { walletToken }
             );
         }
 
@@ -108,6 +162,20 @@
             return this.request(
                 `/api/admin/payments?limit=${encodeURIComponent(limit)}`,
                 { administrator: true }
+            );
+        }
+
+        getAdministratorFeedCredits(limit = 100) {
+            return this.request(
+                `/api/admin/feed-credits?limit=${encodeURIComponent(limit)}`,
+                { administrator: true }
+            );
+        }
+
+        correctFeedCreditWallet(walletId, correction) {
+            return this.request(
+                `/api/admin/feed-credits/wallets/${encodeURIComponent(walletId)}/corrections`,
+                { method: "POST", body: correction, administrator: true }
             );
         }
 
@@ -234,7 +302,8 @@
         async request(path, {
             method = "GET",
             body,
-            administrator = false
+            administrator = false,
+            walletToken = null
         } = {}) {
             if (typeof this.fetchImpl !== "function") {
                 throw new ApiClientError("This browser cannot connect to the feed service.", {
@@ -255,6 +324,8 @@
             if (administrator && this.developmentAdministratorIdentity) {
                 headers.authorization =
                     `Development ${this.developmentAdministratorIdentity}`;
+            } else if (walletToken) {
+                headers.authorization = `Wallet ${walletToken}`;
             }
 
             let response;

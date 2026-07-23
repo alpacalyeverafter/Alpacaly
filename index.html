@@ -10,7 +10,7 @@
 
     <title>Alpacaly Ever After</title>
 
-    <link rel="stylesheet" href="style.css?v=phase-8a">
+    <link rel="stylesheet" href="style.css?v=phase-8c-countdown-1">
 </head>
 
 <body>
@@ -132,29 +132,102 @@
 
 </div>
 
-<div class="demo-controls">
+<section class="feed-credit-panel" aria-labelledby="feed-credit-heading">
+    <div class="feed-credit-intro">
+        <p class="label">Stripe Test Mode</p>
+        <h3 id="feed-credit-heading">Feed Credits</h3>
+        <p>
+            Buy credits first, then use one when you are here to watch.
+            Buying credits never starts the countdown. A credit gives you the
+            right to request a feed; welfare and operational controls still decide
+            whether and when a dispense can occur.
+        </p>
+    </div>
 
-    <input
-        id="supporter-name"
-        type="text"
-        placeholder="Supporter name"
-    >
+    <form id="wallet-create" class="wallet-create">
+        <label for="supporter-name">Your display name</label>
+        <div class="wallet-create-row">
+            <input
+                id="supporter-name"
+                type="text"
+                maxlength="80"
+                autocomplete="name"
+                placeholder="Supporter name"
+                required
+            >
+            <button id="create-wallet" class="button" type="submit">
+                Create private wallet
+            </button>
+        </div>
+    </form>
 
-    <button id="test-sponsor" class="button" type="button">
-        Sponsor a £5 Test Feed
-    </button>
+    <div id="wallet-dashboard" class="wallet-dashboard" hidden>
+        <div class="wallet-heading-row">
+            <div>
+                <span class="wallet-kicker">Your private wallet</span>
+                <strong id="wallet-name">Supporter</strong>
+            </div>
+            <button id="forget-wallet" class="text-button" type="button">
+                Forget this wallet on this browser
+            </button>
+        </div>
 
-    <button id="reset-demo" class="button button-secondary" type="button">
-        Reset Demo
-    </button>
+        <div class="wallet-balances" aria-label="Feed Credit balance">
+            <div><strong id="credits-available">0</strong><span>Available</span></div>
+            <div><strong id="credits-reserved">0</strong><span>Reserved</span></div>
+            <div><strong id="credits-spent">0</strong><span>Spent</span></div>
+        </div>
 
-    <p id="supporter-message">
-        Stripe Test Mode only. A payment is a request to join the feeding queue,
-        not a guaranteed dispense. Welfare and operational controls always decide
-        whether and when feeding can occur.
+        <div class="credit-pack-grid" aria-label="Buy Feed Credits">
+            <button class="credit-pack" data-pack-id="feed_credit_1" type="button">
+                <strong>£5</strong><span>1 Feed Credit</span>
+            </button>
+            <button class="credit-pack" data-pack-id="feed_credit_3" type="button">
+                <strong>£15</strong><span>3 Feed Credits</span>
+            </button>
+            <button class="credit-pack" data-pack-id="feed_credit_5" type="button">
+                <strong>£25</strong><span>5 Feed Credits</span>
+            </button>
+        </div>
+
+        <div class="feed-credit-actions">
+            <button id="use-credit" class="button" type="button">
+                Use 1 Feed Credit
+            </button>
+            <button id="cancel-reservation" class="button button-secondary" type="button" hidden>
+                Cancel request
+            </button>
+        </div>
+
+        <div id="your-turn" class="your-turn" hidden>
+            <span class="live-dot" aria-hidden="true"></span>
+            <div>
+                <strong>Your turn</strong>
+                <p>Keep this page active, then confirm to start the 10-second countdown.</p>
+            </div>
+            <button id="confirm-feed" class="button" type="button">
+                Start my countdown
+            </button>
+        </div>
+
+        <div
+            id="feed-countdown"
+            class="feed-countdown"
+            role="timer"
+            aria-live="polite"
+            aria-atomic="true"
+            hidden
+        >
+            <span class="feed-countdown-kicker">Feed begins in</span>
+            <strong id="feed-countdown-value">10</strong>
+            <span id="feed-countdown-label">seconds</span>
+        </div>
+    </div>
+
+    <p id="supporter-message" class="supporter-message" role="status" aria-live="polite">
+        Create or recover your private Feed Credit wallet to begin.
     </p>
-
-</div>
+</section>
 
         </section>
 
@@ -344,10 +417,10 @@
         </p>
 
     </footer>
-<script src="js/config.js"></script>
-<script src="js/api-client.js"></script>
-<script src="js/event-engine.js"></script>
-<script src="js/payment-gateway.js"></script>
-<script src="js/app.js"></script>
+<script src="js/config.js?v=phase-8c-countdown-1"></script>
+<script src="js/api-client.js?v=phase-8c-countdown-1"></script>
+<script src="js/event-engine.js?v=phase-8c-countdown-1"></script>
+<script src="js/payment-gateway.js?v=phase-8c-countdown-1"></script>
+<script src="js/app.js?v=phase-8c-countdown-1"></script>
 </body>
 </html>

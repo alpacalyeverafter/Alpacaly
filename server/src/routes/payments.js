@@ -1,11 +1,14 @@
 import { Router } from "express";
+import { walletTokenFromRequest } from "./feed-credits.js";
 
 export function createPaymentsRouter({ paymentService }) {
     const router = Router();
 
     router.post("/checkout-sessions", async (req, res, next) => {
         try {
-            const result = await paymentService.createCheckoutSession(req.body);
+            const result = await paymentService.createCheckoutSession(req.body, {
+                walletToken: walletTokenFromRequest(req)
+            });
             res.status(result.duplicate ? 200 : 201).json({
                 sandbox: true,
                 duplicate: result.duplicate,
@@ -14,7 +17,7 @@ export function createPaymentsRouter({ paymentService }) {
                     result.paymentRequest.paymentRequestId
                 ),
                 welfareNotice:
-                    "Payment is a request to join the feeding queue, not a guaranteed dispense. Animal-welfare and operational controls always decide whether and when feeding can occur.",
+                    "Payment only adds Feed Credits. It never starts a countdown or feed.",
                 requestId: req.requestId
             });
         } catch (error) {
@@ -26,11 +29,12 @@ export function createPaymentsRouter({ paymentService }) {
         try {
             res.status(200).json({
                 sandbox: true,
-                paymentRequest: paymentService.getPaymentRequestView(
-                    req.params.paymentRequestId
+                paymentRequest: paymentService.getOwnedPaymentRequestView(
+                    req.params.paymentRequestId,
+                    walletTokenFromRequest(req)
                 ),
                 welfareNotice:
-                    "A completed payment does not bypass welfare limits, feeding windows, emergency stops or operational holds.",
+                    "A completed payment only adds Feed Credits and does not create a feed request.",
                 requestId: req.requestId
             });
         } catch (error) {

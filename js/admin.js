@@ -18,6 +18,9 @@
     };
     const historyList = document.getElementById("feed-history-list");
     const paymentActivityList = document.getElementById("payment-activity-list");
+    const feedCreditActivityList = document.getElementById(
+        "feed-credit-activity-list"
+    );
     const feedingNowElement = document.getElementById("feeding-now");
     const waitingQueueList = document.getElementById("waiting-queue-list");
     const emergencyStopList = document.getElementById("emergency-stop-list");
@@ -49,6 +52,7 @@
     let administratorAuthenticated = false;
     let paymentRefreshInFlight = false;
     let sandboxDiagnosticsRefreshInFlight = false;
+    let feedCreditRefreshInFlight = false;
 
     function formatCurrency(value) {
         return `£${Number(value || 0).toFixed(2)}`;
@@ -342,6 +346,81 @@
         });
     }
 
+    function renderFeedCreditActivity(feedCredits = null, unavailableMessage = null) {
+        feedCreditActivityList.replaceChildren();
+        if (unavailableMessage) {
+            feedCreditActivityList.append(createStatusItem(
+                "Feed Credit ledger unavailable",
+                unavailableMessage
+            ));
+            return;
+        }
+        if (!feedCredits || feedCredits.wallets.length === 0) {
+            feedCreditActivityList.append(createStatusItem(
+                "No Feed Credit wallets yet",
+                "Wallet purchases and credit lifecycle entries will appear here."
+            ));
+            return;
+        }
+        feedCredits.wallets.forEach(wallet => {
+            const balance = wallet.balance || {};
+            const reservation = feedCredits.reservations.find(item => (
+                item.event?.eventId
+                && wallet.reservations?.some(owned => (
+                    owned.reservationId === item.reservationId
+                ))
+            ));
+            const details = [
+                `Wallet ${wallet.walletId}`,
+                `Available ${balance.available || 0}`,
+                `Reserved ${balance.reserved || 0}`,
+                `Spent ${balance.spent || 0}`,
+                reservation ? `Event ${reservation.event.eventId}` : null,
+                reservation ? `Reservation ${reservation.status}` : null
+            ].filter(Boolean).join(" • ");
+            const item = createStatusItem(
+                wallet.supporterDisplayName || "Supporter wallet",
+                details
+            );
+            item.style.marginBottom = "12px";
+            feedCreditActivityList.append(item);
+        });
+        feedCredits.ledgerEntries.slice(0, 20).forEach(entry => {
+            const deltas = [
+                entry.availableDelta ? `available ${entry.availableDelta > 0 ? "+" : ""}${entry.availableDelta}` : null,
+                entry.reservedDelta ? `reserved ${entry.reservedDelta > 0 ? "+" : ""}${entry.reservedDelta}` : null,
+                entry.spentDelta ? `spent ${entry.spentDelta > 0 ? "+" : ""}${entry.spentDelta}` : null
+            ].filter(Boolean).join(", ") || "audit-only adjustment";
+            const item = createStatusItem(
+                `${entry.entryType.replaceAll("_", " ")} • ${entry.walletId}`,
+                [
+                    deltas,
+                    entry.reservationId ? `Reservation ${entry.reservationId}` : null,
+                    entry.eventId ? `Event ${entry.eventId}` : null,
+                    entry.reason,
+                    new Date(entry.createdAt).toLocaleString()
+                ].filter(Boolean).join(" • ")
+            );
+            item.style.marginBottom = "12px";
+            feedCreditActivityList.append(item);
+        });
+    }
+
+    async function refreshFeedCredits() {
+        if (!administratorAuthenticated || feedCreditRefreshInFlight) {
+            return;
+        }
+        feedCreditRefreshInFlight = true;
+        try {
+            const response = await apiClient.getAdministratorFeedCredits(100);
+            renderFeedCreditActivity(response.feedCredits);
+        } catch (error) {
+            renderFeedCreditActivity(null, error.message || "Please try again shortly.");
+        } finally {
+            feedCreditRefreshInFlight = false;
+        }
+    }
+
     function formatDiagnosticTime(value) {
         if (!value) {
             return "No webhook received";
@@ -605,7 +684,11 @@
             administratorAuthenticated = true;
             eventEngine.subscribe(renderState);
             renderState(eventEngine.getState());
-            await Promise.all([renderPayments(), refreshSandboxDiagnostics()]);
+            await Promise.all([
+                renderPayments(),
+                refreshSandboxDiagnostics(),
+                refreshFeedCredits()
+            ]);
         } catch (error) {
             administratorAuthenticated = false;
             stateElements.serverStatus.textContent = "Authentication required";
@@ -619,6 +702,7 @@
     }
 
     renderPaymentActivity([]);
+    renderFeedCreditActivity();
     renderHistory([]);
     renderEmergencyStops([]);
     renderApprovalRequests([]);
@@ -648,6 +732,7 @@
     window.setInterval(() => {
         void renderPayments();
         void refreshSandboxDiagnostics();
+        void refreshFeedCredits();
     }, 5000);
     void initializeAdministrator();
 })();

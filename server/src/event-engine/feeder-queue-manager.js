@@ -25,6 +25,7 @@ export class FeederQueueManager {
             activeEventId: null,
             processing: false,
             processingScheduled: false,
+            resumeAfterCurrent: false,
             acceptedToday: 0,
             completedToday: 0
         };
@@ -58,6 +59,7 @@ export class FeederQueueManager {
             runtime.archivedEventIds = [];
             runtime.processing = false;
             runtime.processingScheduled = false;
+            runtime.resumeAfterCurrent = false;
             runtime.activeEventId = null;
             runtime.acceptedToday = 0;
             runtime.completedToday = 0;

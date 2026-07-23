@@ -36,6 +36,7 @@ export class PaymentService {
         eventEngine,
         eventStore = eventEngine.eventStore,
         contributionLedgerServices,
+        feedCreditService,
         adapter,
         config,
         logger,
@@ -45,6 +46,7 @@ export class PaymentService {
         this.eventEngine = eventEngine;
         this.eventStore = eventStore;
         this.ledger = contributionLedgerServices;
+        this.feedCredits = feedCreditService;
         this.adapter = adapter;
         this.config = config;
         this.logger = logger;
@@ -52,14 +54,28 @@ export class PaymentService {
         this.idGenerator = idGenerator;
     }
 
-    async createCheckoutSession(payload) {
+    async createCheckoutSession(payload, { walletToken } = {}) {
         this.requireSandboxEnabled();
-        const input = this.validateDonationRequest(payload);
+        const purchaseInput = this.feedCredits.preparePurchase(walletToken, payload);
+        const input = {
+            supporterDisplayName: purchaseInput.wallet.supporterDisplayName,
+            clientRequestId: purchaseInput.clientRequestId,
+            amountMinor: purchaseInput.pack.amountMinor,
+            currency: "GBP"
+        };
         const existing = this.eventStore.getPaymentRequestByClientRequest(
             this.adapter.provider,
             input.clientRequestId
         );
         if (existing) {
+            const existingPurchase = this.feedCredits.store
+                .getPurchaseByPaymentRequest(existing.paymentRequestId);
+            if (existingPurchase?.walletId !== purchaseInput.wallet.walletId) {
+                throw new ApplicationError("The purchase reference is already in use.", {
+                    code: "PAYMENT_REQUEST_CONFLICT",
+                    statusCode: 409
+                });
+            }
             return { paymentRequest: existing, duplicate: true };
         }
 
@@ -73,13 +89,25 @@ export class PaymentService {
         });
 
         try {
-            this.eventStore.createPaymentRequest(paymentRequest);
+            this.feedCredits.createPurchaseForPayment(
+                paymentRequest,
+                purchaseInput.wallet,
+                purchaseInput.pack
+            );
         } catch (error) {
             const concurrent = this.eventStore.getPaymentRequestByClientRequest(
                 this.adapter.provider,
                 input.clientRequestId
             );
             if (concurrent) {
+                const concurrentPurchase = this.feedCredits.store
+                    .getPurchaseByPaymentRequest(concurrent.paymentRequestId);
+                if (concurrentPurchase?.walletId !== purchaseInput.wallet.walletId) {
+                    throw new ApplicationError(
+                        "The purchase reference is already in use.",
+                        { code: "PAYMENT_REQUEST_CONFLICT", statusCode: 409 }
+                    );
+                }
                 return { paymentRequest: concurrent, duplicate: true };
             }
             throw error;
@@ -95,6 +123,7 @@ export class PaymentService {
                 paymentRequestId: paymentRequest.paymentRequestId,
                 amountMinor: paymentRequest.amountMinor,
                 currency: paymentRequest.currency,
+                credits: purchaseInput.pack.credits,
                 successUrl: `${publicBaseUrl}/index.html?${query}&checkout=success`,
                 cancelUrl: `${publicBaseUrl}/index.html?${query}&checkout=cancelled`
             });
@@ -236,71 +265,19 @@ export class PaymentService {
             };
         }
 
-        const verification = this.ledger.contributionVerificationService.verify(
-            ingestion.providerEvent.providerEventId,
-            {
-                verified: true,
-                eligible: true,
-                amountMinor: paymentRequest.amountMinor,
-                currency: paymentRequest.currency,
-                supporterDisplayName: paymentRequest.supporterDisplayName,
-                feedQuantity: 1,
-                metadata: {
-                    paymentRequestId: paymentRequest.paymentRequestId,
-                    checkoutSessionId: paymentRequest.checkoutSessionId,
-                    paymentMode: "TEST"
-                },
-                feederId: this.eventEngine.getDefaultFeederId(),
-                message: "Sandbox website feed sponsorship request"
-            }
-        );
-        if (!verification.accepted || !verification.contribution || !verification.feedIntent) {
-            return {
-                received: true,
-                handled: true,
-                accepted: false,
-                duplicate: ingestion.duplicate,
-                eventType: event.type,
-                reason: "CONTRIBUTION_REJECTED",
-                paymentRequest: this.getPaymentRequestView(
-                    paymentRequest.paymentRequestId
-                )
-            };
-        }
-
         const now = this.clock().toISOString();
-        let updated = this.updatePayment(paymentRequest, {
+        this.feedCredits.applyVerifiedPurchase(
+            paymentRequest,
+            ingestion.providerEvent.providerEventId
+        );
+        const updated = this.updatePayment(paymentRequest, {
             status: "COMPLETED",
             providerStatus: normalizedText(object.payment_status) || "paid",
             failureCode: null,
             paymentIntentId: normalizedText(object.payment_intent) || null,
             providerEventId: ingestion.providerEvent.providerEventId,
-            contributionId: verification.contribution.contributionId,
-            feedIntentId: verification.feedIntent.feedIntentId,
             completedAt: now
         });
-
-        try {
-            const feedResult = this.ledger.outboxWorker.processFeedIntent(
-                verification.feedIntent.feedIntentId
-            );
-            if (feedResult?.feedRequest) {
-                updated = this.updatePayment(updated, {
-                    status: updated.status,
-                    providerStatus: updated.providerStatus,
-                    failureCode: updated.failureCode,
-                    eventId: feedResult.feedRequest.eventId
-                });
-            }
-        } catch (error) {
-            this.logger.warn({
-                event: "paid_feed_request_delayed",
-                paymentRequestId: paymentRequest.paymentRequestId,
-                contributionId: verification.contribution.contributionId,
-                feedIntentId: verification.feedIntent.feedIntentId,
-                reason: error.code || "EVENT_ENGINE_REJECTED"
-            }, "Payment completed but the feed request remains safely delayed");
-        }
 
         return {
             received: true,
@@ -334,6 +311,9 @@ export class PaymentService {
             providerEventId: ingestion.providerEvent.providerEventId,
             paymentIntentId: this.paymentIntentIdFrom(event, object)
         });
+        if (["REFUNDED", "DISPUTED"].includes(nextState.status)) {
+            this.feedCredits.applyPaymentAdjustment(updated, nextState.status);
+        }
         return {
             received: true,
             handled: true,
@@ -399,6 +379,12 @@ export class PaymentService {
                 : null);
         const feedRequest = eventId ? this.eventEngine.getFeedRequest(eventId) : null;
         const feeding = this.describeFeeding(payment, contribution, feedIntent, feedRequest);
+        const purchase = this.feedCredits.store.getPurchaseByPaymentRequest(
+            payment.paymentRequestId
+        );
+        const walletBalance = purchase
+            ? this.feedCredits.store.getBalance(purchase.walletId)
+            : null;
 
         return {
             paymentRequestId: payment.paymentRequestId,
@@ -411,6 +397,13 @@ export class PaymentService {
             createdAt: payment.createdAt,
             updatedAt: payment.updatedAt,
             completedAt: payment.completedAt,
+            creditPurchase: purchase ? {
+                purchaseId: purchase.purchaseId,
+                packId: purchase.packId,
+                credits: purchase.credits,
+                status: purchase.status
+            } : null,
+            walletBalance,
             contribution: contribution ? {
                 contributionId: contribution.contributionId,
                 eligibilityStatus: contribution.eligibilityStatus
@@ -438,6 +431,20 @@ export class PaymentService {
         };
     }
 
+    getOwnedPaymentRequestView(paymentRequestId, walletToken) {
+        const wallet = this.feedCredits.authenticateWallet(walletToken);
+        const purchase = this.feedCredits.store.getPurchaseByPaymentRequest(
+            paymentRequestId
+        );
+        if (!purchase || purchase.walletId !== wallet.walletId) {
+            throw new ApplicationError("Payment request not found.", {
+                code: "PAYMENT_REQUEST_NOT_FOUND",
+                statusCode: 404
+            });
+        }
+        return this.getPaymentRequestView(paymentRequestId);
+    }
+
     listPaymentRequestViews({ limit = 100 } = {}) {
         return this.eventStore.listPaymentRequests({ limit }).map(payment => (
             this.getPaymentRequestView(payment.paymentRequestId, { administrator: true })
@@ -454,7 +461,17 @@ export class PaymentService {
         if (["FAILED", "EXPIRED"].includes(payment.status)) {
             return {
                 status: "PAYMENT_NOT_COMPLETED",
-                message: "No feed request was created from this payment attempt."
+                message: "No Feed Credits were added from this payment attempt."
+            };
+        }
+        const purchase = this.feedCredits.store.getPurchaseByPaymentRequest(
+            payment.paymentRequestId
+        );
+        if (purchase && payment.status === "COMPLETED") {
+            return {
+                status: "CREDITS_ADDED",
+                message:
+                    `${purchase.credits} Feed Credit${purchase.credits === 1 ? " was" : "s were"} added. Buying credits does not start a feed.`
             };
         }
         if (!contribution || !feedIntent) {
@@ -495,40 +512,6 @@ export class PaymentService {
             message: ["COMPLETE", "ARCHIVED"].includes(feedRequest.state)
                 ? "The simulated feed lifecycle completed."
                 : "The feed request is subject to welfare, timing and operational approval."
-        };
-    }
-
-    validateDonationRequest(payload) {
-        const supporterDisplayName = normalizedText(payload?.supporterName);
-        if (!supporterDisplayName || supporterDisplayName.length > 80) {
-            throw new ApplicationError("Enter a supporter name of 80 characters or fewer.", {
-                code: "PAYMENT_REQUEST_INVALID",
-                statusCode: 400
-            });
-        }
-        const clientRequestId = normalizedText(payload?.clientRequestId);
-        if (!/^[A-Za-z0-9_.:-]{8,120}$/.test(clientRequestId)) {
-            throw new ApplicationError("The payment request reference is invalid.", {
-                code: "PAYMENT_REQUEST_INVALID",
-                statusCode: 400
-            });
-        }
-        const amountMinor = Number(payload?.amountMinor);
-        const currency = normalizedText(payload?.currency).toUpperCase();
-        if (
-            amountMinor !== this.config.paymentDonationAmountMinor
-            || currency !== this.config.paymentDonationCurrency
-        ) {
-            throw new ApplicationError("The sandbox donation amount or currency is invalid.", {
-                code: "PAYMENT_AMOUNT_MISMATCH",
-                statusCode: 400
-            });
-        }
-        return {
-            supporterDisplayName,
-            clientRequestId,
-            amountMinor,
-            currency
         };
     }
 

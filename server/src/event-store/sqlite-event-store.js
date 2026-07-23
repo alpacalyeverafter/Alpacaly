@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { DEFAULT_RESOURCE_IDS } from "../domain/resources.js";
+import { ApplicationError } from "../errors/application-error.js";
 import { runEventStoreMigrations } from "./migrations/index.js";
 
 function parseJson(value) {
@@ -1639,6 +1640,18 @@ export class SqliteEventStore {
 
     clearAll() {
         this.transaction(() => {
+            const creditLedgerCount = Number(this.database.prepare(`
+                SELECT COUNT(*) AS count FROM CreditLedgerEntries
+            `).get().count);
+            if (creditLedgerCount > 0) {
+                throw new ApplicationError(
+                    "Development reset cannot erase the append-only Feed Credit ledger.",
+                    {
+                        code: "FEED_CREDIT_LEDGER_RESET_FORBIDDEN",
+                        statusCode: 409
+                    }
+                );
+            }
             this.database.exec(`
                 DELETE FROM WelfareSafetyLedger;
                 DELETE FROM ApprovalDecisions;
@@ -1658,6 +1671,9 @@ export class SqliteEventStore {
                 DELETE FROM ApprovalRequests;
                 DELETE FROM EmergencyStops;
                 DELETE FROM MqttSafetyStates;
+                DELETE FROM CreditReservations;
+                DELETE FROM CreditPurchases;
+                DELETE FROM CreditWallets;
                 DELETE FROM PaymentRequests;
                 DELETE FROM AuditRecords;
                 DELETE FROM Events;

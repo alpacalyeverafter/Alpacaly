@@ -1,252 +1,413 @@
 // ============================================
 // Alpacaly Ever After
-// Website to Event Engine connection
+// Feed Credit wallet and click-to-feed journey
 // ============================================
 
 (() => {
     "use strict";
 
     const eventEngine = window.alpacalyEventEngine;
+    const apiClient = window.alpacalyApiClient;
     const paymentGateway = window.paymentGateway;
+    const WALLET_TOKEN_KEY = "alpacaly_feed_credit_wallet_token_v1";
 
-    const feedsDisplay = document.getElementById("feeds-remaining");
-    const queuePositionDisplay = document.getElementById("queue-position");
-    const estimatedWaitDisplay = document.getElementById("estimated-wait");
-    const systemStatus = document.getElementById("system-status");
-    const eventIdDisplay = document.getElementById("event-id");
-    const paymentStatusDisplay = document.getElementById("payment-status");
-    const supporterName = document.getElementById("supporter-name");
-    const sponsorButton = document.getElementById("test-sponsor");
-    const resetDemoButton = document.getElementById("reset-demo");
-    const supporterMessage = document.getElementById("supporter-message");
-
-    const requiredElements = {
-        feedsDisplay,
-        queuePositionDisplay,
-        estimatedWaitDisplay,
-        systemStatus,
-        eventIdDisplay,
-        paymentStatusDisplay,
-        supporterName,
-        sponsorButton,
-        resetDemoButton,
-        supporterMessage
+    const elements = {
+        feedsDisplay: document.getElementById("feeds-remaining"),
+        queuePosition: document.getElementById("queue-position"),
+        estimatedWait: document.getElementById("estimated-wait"),
+        systemStatus: document.getElementById("system-status"),
+        eventId: document.getElementById("event-id"),
+        paymentStatus: document.getElementById("payment-status"),
+        walletCreate: document.getElementById("wallet-create"),
+        supporterName: document.getElementById("supporter-name"),
+        createWallet: document.getElementById("create-wallet"),
+        walletDashboard: document.getElementById("wallet-dashboard"),
+        walletName: document.getElementById("wallet-name"),
+        creditsAvailable: document.getElementById("credits-available"),
+        creditsReserved: document.getElementById("credits-reserved"),
+        creditsSpent: document.getElementById("credits-spent"),
+        packButtons: [...document.querySelectorAll("[data-pack-id]")],
+        useCredit: document.getElementById("use-credit"),
+        cancelReservation: document.getElementById("cancel-reservation"),
+        yourTurn: document.getElementById("your-turn"),
+        confirmFeed: document.getElementById("confirm-feed"),
+        feedCountdown: document.getElementById("feed-countdown"),
+        feedCountdownValue: document.getElementById("feed-countdown-value"),
+        feedCountdownLabel: document.getElementById("feed-countdown-label"),
+        forgetWallet: document.getElementById("forget-wallet"),
+        message: document.getElementById("supporter-message")
     };
 
-    if (!eventEngine || !paymentGateway) {
+    if (!eventEngine || !apiClient || !paymentGateway) {
         console.error("[App] Feed service modules were not loaded.");
         return;
     }
-
-    const missing = Object.entries(requiredElements)
-        .filter(([, element]) => !element)
+    const missing = Object.entries(elements)
+        .filter(([, element]) => !element || (Array.isArray(element) && element.length === 0))
         .map(([name]) => name);
-
     if (missing.length > 0) {
         console.error("[App] Missing required page elements:", missing);
         return;
     }
 
-    let previousStatus = null;
-    let previousBackendAvailable = null;
-    let isSubmitting = false;
-    let confirmationTimeoutId = null;
+    let walletToken = window.localStorage.getItem(WALLET_TOKEN_KEY);
+    let wallet = null;
+    let activeReservation = null;
     let trackedPaymentRequest = null;
-    let paymentPollTimerId = null;
+    let submitting = false;
+    let walletPollTimer = null;
+    let paymentPollTimer = null;
+    let presenceTimer = null;
+    let countdownTimer = null;
 
-    function formatDuration(milliseconds) {
-        const totalSeconds = Math.max(0, Math.ceil(Number(milliseconds || 0) / 1000));
-        if (totalSeconds === 0) {
-            return "Now";
-        }
-
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+    function requestId(prefix) {
+        return eventEngine.generateClientRequestId(prefix);
     }
 
-    function setButtonForState(state) {
-        sponsorButton.disabled = isSubmitting
-            || state.feedsRemaining <= 0
-            || state.backendAvailable === false;
-        sponsorButton.textContent = "Sponsor a £5 Test Feed";
-    }
-
-    function clearSupporterConfirmation() {
-        if (confirmationTimeoutId) {
-            window.clearTimeout(confirmationTimeoutId);
-            confirmationTimeoutId = null;
-        }
-
-        supporterMessage.textContent = "";
-    }
-
-    function showTemporaryMessage(message) {
-        clearSupporterConfirmation();
-        supporterMessage.textContent = message;
-        confirmationTimeoutId = window.setTimeout(() => {
-            confirmationTimeoutId = null;
-            supporterMessage.textContent = "";
-        }, 5000);
-    }
-
-    function showSupporterConfirmation(paymentRequest) {
-        const event = paymentRequest.event;
-        showTemporaryMessage(
-            event
-                ? `Sandbox payment confirmed. Event ${event.eventId} is in queue position ${event.queuePosition ?? "—"}.`
-                : paymentRequest.feeding?.message
-                    || "Sandbox payment status updated."
-        );
-    }
-
-    function renderPaymentRequest(paymentRequest) {
-        trackedPaymentRequest = paymentRequest;
-        paymentStatusDisplay.textContent = formatState(paymentRequest.status);
-        const event = paymentRequest.event;
-        if (event) {
-            queuePositionDisplay.textContent = event.queuePosition === null
-                ? formatState(event.state)
-                : String(event.queuePosition);
-            estimatedWaitDisplay.textContent = event.queuePosition === null
-                ? `Estimated wait: ${formatState(event.state)}`
-                : `Estimated wait: ${formatDuration(event.estimatedWaitMs)}`;
-            eventIdDisplay.textContent = `Event ID: ${event.eventId}`;
-            systemStatus.textContent = formatState(event.state);
-        } else {
-            queuePositionDisplay.textContent = "—";
-            estimatedWaitDisplay.textContent = "Estimated wait: —";
-            eventIdDisplay.textContent = paymentRequest.status === "COMPLETED"
-                ? "Event ID: pending Event Engine acceptance"
-                : "Event ID: —";
-            systemStatus.textContent = formatState(
-                paymentRequest.feeding?.status || paymentRequest.status
-            );
-        }
-    }
-
-    function renderTrackedEvent(trackedEvent, fallbackStatus) {
-        if (!trackedEvent) {
-            queuePositionDisplay.textContent = "—";
-            estimatedWaitDisplay.textContent = "Estimated wait: —";
-            eventIdDisplay.textContent = "Event ID: —";
-            systemStatus.textContent = formatState(fallbackStatus);
-            return;
-        }
-
-        queuePositionDisplay.textContent = trackedEvent.queuePosition === null
-            ? "Complete"
-            : String(trackedEvent.queuePosition);
-        estimatedWaitDisplay.textContent = trackedEvent.queuePosition === null
-            ? "Estimated wait: Complete"
-            : `Estimated wait: ${formatDuration(trackedEvent.estimatedWaitMs)}`;
-        eventIdDisplay.textContent = `Event ID: ${trackedEvent.eventId}`;
-        systemStatus.textContent = formatState(trackedEvent.state || trackedEvent.status);
-    }
-
-    function formatState(state) {
-        return String(state || "READY")
+    function formatState(value) {
+        return String(value || "READY")
             .replaceAll("_", " ")
             .toLowerCase()
             .replace(/\b\w/g, letter => letter.toUpperCase());
     }
 
-    function renderState(state) {
-        feedsDisplay.textContent = state.feedsRemaining ?? CONFIG.DEMO_MAX_FEEDS;
-        if (trackedPaymentRequest) {
-            renderPaymentRequest(trackedPaymentRequest);
-        } else {
-            paymentStatusDisplay.textContent = "Sandbox ready";
-            renderTrackedEvent(state.trackedEvent, state.status);
-        }
+    function formatDuration(milliseconds) {
+        const seconds = Math.max(0, Math.ceil(Number(milliseconds || 0) / 1000));
+        return seconds < 60
+            ? `${seconds}s`
+            : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+    }
 
-        const trackedStatus = state.trackedEvent
-            ? state.trackedEvent.state || state.trackedEvent.status
-            : state.status;
-        if (trackedStatus === "COMPLETE" && previousStatus !== "COMPLETE") {
-            supporterName.value = "";
-        }
+    function setMessage(message, error = false) {
+        elements.message.textContent = message;
+        elements.message.classList.toggle("supporter-message-error", error);
+    }
 
-        if (state.backendAvailable === false && !isSubmitting) {
-            clearSupporterConfirmation();
-            supporterMessage.textContent = state.message
-                || "The feed service is unavailable. Please try again shortly.";
-        } else if (
-            state.backendAvailable === true
-            && previousBackendAvailable === false
-            && !isSubmitting
+    function setSubmitting(value) {
+        submitting = value;
+        elements.createWallet.disabled = value;
+        elements.packButtons.forEach(button => {
+            button.disabled = value;
+        });
+        renderWallet();
+    }
+
+    function stopCountdown() {
+        if (countdownTimer) {
+            window.clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+        elements.feedCountdown.hidden = true;
+    }
+
+    function currentCountdown() {
+        const eventId = activeReservation?.event?.eventId;
+        const currentEvent = eventEngine.getState().currentEvent;
+        if (
+            !eventId
+            || !currentEvent
+            || currentEvent.eventId !== eventId
+            || currentEvent.state !== "COUNTDOWN"
         ) {
-            showTemporaryMessage("Feed service reconnected.");
+            return null;
         }
-
-        setButtonForState(state);
-        previousStatus = trackedStatus;
-        previousBackendAvailable = state.backendAvailable;
+        return currentEvent.countdown || null;
     }
 
-    function releaseSubmission() {
-        isSubmitting = false;
-        setButtonForState(eventEngine.getState());
-        supporterName.focus();
-    }
-
-    async function submitDemoFeed() {
-        if (isSubmitting) {
+    function updateCountdown() {
+        const countdown = currentCountdown();
+        const endsAt = Date.parse(countdown?.endsAt);
+        if (!countdown || !Number.isFinite(endsAt)) {
+            stopCountdown();
             return;
         }
 
-        const name = supporterName.value.trim();
+        const remainingMs = Math.max(0, endsAt - Date.now());
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        elements.feedCountdown.hidden = false;
+        elements.feedCountdownValue.textContent = String(remainingSeconds);
+        elements.feedCountdownLabel.textContent = remainingSeconds === 1
+            ? "second"
+            : remainingSeconds === 0
+                ? "Countdown complete"
+                : "seconds";
 
-        if (!name) {
-            supporterMessage.textContent = "Please enter a supporter name.";
-            supporterName.focus();
+        if (remainingMs === 0 && countdownTimer) {
+            window.clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+    }
+
+    function renderCountdown() {
+        if (!currentCountdown()) {
+            stopCountdown();
+            return;
+        }
+        updateCountdown();
+        if (!countdownTimer) {
+            countdownTimer = window.setInterval(updateCountdown, 200);
+        }
+    }
+
+    function currentActiveReservation(reservations = []) {
+        return reservations.find(item => [
+            "WAITING", "YOUR_TURN", "CONFIRMED", "OUTCOME_UNKNOWN"
+        ].includes(item.status)) || null;
+    }
+
+    function renderWallet() {
+        const hasWallet = Boolean(wallet && walletToken);
+        elements.walletCreate.hidden = hasWallet;
+        elements.walletDashboard.hidden = !hasWallet;
+        if (!hasWallet) {
+            stopCountdown();
             return;
         }
 
-        isSubmitting = true;
-        sponsorButton.disabled = true;
-        sponsorButton.textContent = "Opening test checkout...";
+        const balance = wallet.balance || {};
+        elements.walletName.textContent = wallet.supporterDisplayName;
+        elements.creditsAvailable.textContent = String(balance.available || 0);
+        elements.creditsReserved.textContent = String(balance.reserved || 0);
+        elements.creditsSpent.textContent = String(balance.spent || 0);
 
+        activeReservation = currentActiveReservation(wallet.reservations);
+        const hasActive = Boolean(activeReservation);
+        const canUse = Number(balance.available || 0) > 0 && !hasActive && !submitting;
+        elements.useCredit.disabled = !canUse;
+        elements.useCredit.textContent = hasActive
+            ? formatState(activeReservation.status)
+            : "Use 1 Feed Credit";
+        elements.cancelReservation.hidden = !activeReservation
+            || !["WAITING", "YOUR_TURN"].includes(activeReservation.status);
+        const isYourTurn = activeReservation?.status === "YOUR_TURN";
+        elements.yourTurn.hidden = !isYourTurn;
+        elements.confirmFeed.disabled = !isYourTurn
+            || document.visibilityState !== "visible"
+            || submitting;
+
+        if (activeReservation?.event) {
+            const event = activeReservation.event;
+            elements.queuePosition.textContent = event.queuePosition === null
+                ? formatState(event.state)
+                : String(event.queuePosition);
+            elements.estimatedWait.textContent = event.queuePosition === null
+                ? `Estimated wait: ${formatState(event.state)}`
+                : `Estimated wait: ${formatDuration(event.estimatedWaitMs)}`;
+            elements.eventId.textContent = `Event ID: ${event.eventId}`;
+            elements.systemStatus.textContent = formatState(event.state);
+        }
+        if (activeReservation?.message) {
+            setMessage(activeReservation.message,
+                activeReservation.status === "OUTCOME_UNKNOWN");
+        }
+        renderCountdown();
+    }
+
+    function renderEventEngine(state) {
+        elements.feedsDisplay.textContent = state.feedsRemaining ?? CONFIG.DEMO_MAX_FEEDS;
+        renderCountdown();
+        if (!activeReservation?.event) {
+            elements.queuePosition.textContent = "—";
+            elements.estimatedWait.textContent = "Estimated wait: —";
+            elements.eventId.textContent = "Event ID: —";
+            elements.systemStatus.textContent = formatState(state.status);
+        }
+        if (state.backendAvailable === false) {
+            setMessage(state.message || "The feed service is unavailable.", true);
+        }
+    }
+
+    async function createWallet(event) {
+        event.preventDefault();
+        if (submitting) {
+            return;
+        }
+        const supporterName = elements.supporterName.value.trim();
+        if (!supporterName) {
+            setMessage("Enter a supporter name.", true);
+            elements.supporterName.focus();
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const response = await apiClient.createFeedCreditWallet(supporterName);
+            walletToken = response.recoveryToken;
+            window.localStorage.setItem(WALLET_TOKEN_KEY, walletToken);
+            wallet = response.wallet;
+            elements.supporterName.value = "";
+            setMessage("Private Feed Credit wallet created on this browser.");
+            startWalletPolling();
+        } catch (error) {
+            setMessage(error.message || "The wallet could not be created.", true);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function buyPack(packId) {
+        if (!walletToken || submitting) {
+            return;
+        }
+        setSubmitting(true);
+        setMessage("Opening Stripe Test Mode. Buying credits will not start a feed.");
         try {
             const result = await paymentGateway.createCheckoutSession({
-                supporterName: name,
-                clientRequestId: eventEngine.generateClientRequestId("stripe-test")
+                packId,
+                clientRequestId: requestId("credit-purchase"),
+                walletToken
             });
             if (!result?.checkoutUrl) {
                 throw new Error("The sandbox checkout URL was not returned.");
             }
-            supporterName.value = "";
             trackedPaymentRequest = result.paymentRequest;
-            renderPaymentRequest(result.paymentRequest);
-            supporterMessage.textContent =
-                "Opening Stripe Test Mode. No live payment details should be used.";
-            releaseSubmission();
             window.location.assign(result.checkoutUrl);
         } catch (error) {
-            supporterMessage.textContent = error.message
-                || "The sandbox checkout could not be opened.";
-            releaseSubmission();
+            setMessage(error.message || "Test checkout could not be opened.", true);
+            setSubmitting(false);
         }
     }
 
-    async function refreshTrackedPayment() {
+    async function reserveCredit() {
+        if (!walletToken || submitting) {
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const response = await apiClient.reserveFeedCredit({
+                clientRequestId: requestId("credit-feed"),
+                walletToken
+            });
+            activeReservation = response.reservation;
+            setMessage(response.reservation.message);
+            await refreshWallet();
+        } catch (error) {
+            setMessage(error.message || "The Feed Credit could not be reserved.", true);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function heartbeat() {
+        if (
+            !walletToken
+            || !activeReservation
+            || document.visibilityState !== "visible"
+            || !["WAITING", "YOUR_TURN", "CONFIRMED"].includes(activeReservation.status)
+        ) {
+            return;
+        }
+        try {
+            const response = await apiClient.heartbeatFeedCreditReservation(
+                activeReservation.reservationId,
+                walletToken,
+                true
+            );
+            activeReservation = response.reservation;
+        } catch (error) {
+            if (error.statusCode === 401) {
+                forgetWallet(false);
+            }
+        }
+    }
+
+    async function confirmFeed() {
+        if (!activeReservation || submitting || document.visibilityState !== "visible") {
+            return;
+        }
+        setSubmitting(true);
+        try {
+            await heartbeat();
+            const response = await apiClient.confirmFeedCreditReservation(
+                activeReservation.reservationId,
+                walletToken
+            );
+            activeReservation = response.reservation;
+            setMessage(
+                "Confirmed. Stay here: the safety-controlled 10-second countdown is starting."
+            );
+            await refreshWallet();
+        } catch (error) {
+            setMessage(error.message || "The feed could not be confirmed.", true);
+            await refreshWallet();
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function cancelReservation() {
+        if (!activeReservation || submitting) {
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const response = await apiClient.cancelFeedCreditReservation(
+                activeReservation.reservationId,
+                walletToken
+            );
+            setMessage(response.reservation.message);
+            activeReservation = null;
+            await refreshWallet();
+        } catch (error) {
+            setMessage(error.message || "The request could not be cancelled.", true);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function refreshWallet() {
+        if (!walletToken) {
+            return;
+        }
+        try {
+            const response = await apiClient.getFeedCreditWallet(walletToken);
+            wallet = response.wallet;
+            renderWallet();
+            if (activeReservation?.status === "YOUR_TURN") {
+                void heartbeat();
+            }
+        } catch (error) {
+            if (error.statusCode === 401) {
+                forgetWallet(false);
+                setMessage(
+                    "This wallet session is no longer valid on this browser. Create a new test wallet.",
+                    true
+                );
+                return;
+            }
+            setMessage(error.message || "Wallet status is temporarily unavailable.", true);
+        }
+    }
+
+    async function refreshPayment() {
         if (!trackedPaymentRequest?.paymentRequestId) {
             return;
         }
         try {
             const response = await paymentGateway.getPaymentRequest(
-                trackedPaymentRequest.paymentRequestId
+                trackedPaymentRequest.paymentRequestId,
+                walletToken
             );
-            const priorStatus = trackedPaymentRequest.status;
-            renderPaymentRequest(response.paymentRequest);
-            if (response.paymentRequest.status !== priorStatus) {
-                showSupporterConfirmation(response.paymentRequest);
-            } else if (response.paymentRequest.feeding?.message) {
-                supporterMessage.textContent = response.paymentRequest.feeding.message;
+            trackedPaymentRequest = response.paymentRequest;
+            elements.paymentStatus.textContent = formatState(
+                trackedPaymentRequest.status
+            );
+            if (trackedPaymentRequest.status === "COMPLETED") {
+                setMessage(
+                    "Feed Credits added. No countdown has started—use a credit when you are ready."
+                );
+                await refreshWallet();
+                window.clearInterval(paymentPollTimer);
+                paymentPollTimer = null;
+            } else if (["FAILED", "EXPIRED", "REFUNDED", "DISPUTED"].includes(
+                trackedPaymentRequest.status
+            )) {
+                setMessage(trackedPaymentRequest.feeding?.message || "Payment status updated.");
+                await refreshWallet();
+                window.clearInterval(paymentPollTimer);
+                paymentPollTimer = null;
             }
         } catch (error) {
-            supporterMessage.textContent = error.message
-                || "Payment status is temporarily unavailable.";
+            setMessage(error.message || "Payment status is temporarily unavailable.", true);
         }
     }
 
@@ -256,55 +417,61 @@
         if (!paymentRequestId) {
             return;
         }
-        trackedPaymentRequest = {
-            paymentRequestId,
-            status: "PENDING",
-            event: null,
-            feeding: { status: "PAYMENT_PENDING" }
-        };
+        trackedPaymentRequest = { paymentRequestId, status: "PENDING" };
         if (parameters.get("checkout") === "cancelled") {
-            supporterMessage.textContent =
-                "Test checkout was cancelled. No feed request is created unless payment is verified.";
+            setMessage("Test checkout was cancelled. No credits were added and no feed started.");
         } else {
-            supporterMessage.textContent = "Checking the verified sandbox payment status...";
+            setMessage("Checking the verified test payment. No feed can start from checkout.");
         }
-        void refreshTrackedPayment();
-        paymentPollTimerId = window.setInterval(
-            () => void refreshTrackedPayment(),
-            2000
-        );
+        void refreshPayment();
+        paymentPollTimer = window.setInterval(() => void refreshPayment(), 2000);
     }
 
-    async function resetDemo() {
-        if (isSubmitting || typeof eventEngine.resetDemo !== "function") {
+    function forgetWallet(confirm = true) {
+        if (confirm && !window.confirm(
+            "Forget this wallet on this browser? Its private recovery token will be removed."
+        )) {
             return;
         }
-
-        isSubmitting = true;
-        resetDemoButton.disabled = true;
-        supporterMessage.textContent = "Resetting demo queue...";
-
-        const result = await eventEngine.resetDemo();
-        if (result.success) {
-            trackedPaymentRequest = null;
-            if (paymentPollTimerId) {
-                window.clearInterval(paymentPollTimerId);
-                paymentPollTimerId = null;
-            }
-            supporterMessage.textContent = "Demo queue reset. Ready for the next supporter.";
-        } else {
-            supporterMessage.textContent = result.message
-                || "The demo queue could not be reset.";
+        window.localStorage.removeItem(WALLET_TOKEN_KEY);
+        walletToken = null;
+        wallet = null;
+        activeReservation = null;
+        if (walletPollTimer) {
+            window.clearInterval(walletPollTimer);
+            walletPollTimer = null;
         }
-
-        isSubmitting = false;
-        resetDemoButton.disabled = false;
-        setButtonForState(eventEngine.getState());
+        renderWallet();
     }
 
-    sponsorButton.addEventListener("click", submitDemoFeed);
-    resetDemoButton.addEventListener("click", resetDemo);
-    eventEngine.subscribe(renderState);
-    startPaymentTracking();
+    function startWalletPolling() {
+        if (!walletToken || walletPollTimer) {
+            return;
+        }
+        void refreshWallet();
+        walletPollTimer = window.setInterval(() => void refreshWallet(), 1500);
+    }
 
+    elements.walletCreate.addEventListener("submit", event => void createWallet(event));
+    elements.packButtons.forEach(button => {
+        button.addEventListener("click", () => void buyPack(button.dataset.packId));
+    });
+    elements.useCredit.addEventListener("click", () => void reserveCredit());
+    elements.confirmFeed.addEventListener("click", () => void confirmFeed());
+    elements.cancelReservation.addEventListener("click", () => void cancelReservation());
+    elements.forgetWallet.addEventListener("click", () => forgetWallet(true));
+    document.addEventListener("visibilitychange", () => {
+        renderWallet();
+        if (document.visibilityState === "visible") {
+            void heartbeat();
+            void refreshWallet();
+        }
+    });
+    eventEngine.subscribe(renderEventEngine);
+
+    presenceTimer = window.setInterval(() => void heartbeat(), 5000);
+    void presenceTimer;
+    renderWallet();
+    startWalletPolling();
+    startPaymentTracking();
 })();
