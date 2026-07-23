@@ -416,6 +416,30 @@ export function loadConfig(env = process.env, { loadEnvFile = true } = {}) {
         paymentWebhookBodyLimit: String(
             env.PAYMENT_WEBHOOK_BODY_LIMIT || DEFAULTS.paymentWebhookBodyLimit
         ).trim(),
+        feedCreditReservationLifetimeMs: parseInteger(
+            env.FEED_CREDIT_RESERVATION_LIFETIME_MS,
+            DEFAULTS.feedCreditReservationLifetimeMs,
+            "FEED_CREDIT_RESERVATION_LIFETIME_MS",
+            { minimum: 10_000, maximum: 24 * 60 * 60_000 }
+        ),
+        feedCreditConfirmationTimeoutMs: parseInteger(
+            env.FEED_CREDIT_CONFIRMATION_TIMEOUT_MS,
+            DEFAULTS.feedCreditConfirmationTimeoutMs,
+            "FEED_CREDIT_CONFIRMATION_TIMEOUT_MS",
+            { minimum: 5_000, maximum: 10 * 60_000 }
+        ),
+        feedCreditPresenceTtlMs: parseInteger(
+            env.FEED_CREDIT_PRESENCE_TTL_MS,
+            DEFAULTS.feedCreditPresenceTtlMs,
+            "FEED_CREDIT_PRESENCE_TTL_MS",
+            { minimum: 1_000, maximum: 60_000 }
+        ),
+        feedCreditReconciliationIntervalMs: parseInteger(
+            env.FEED_CREDIT_RECONCILIATION_INTERVAL_MS,
+            DEFAULTS.feedCreditReconciliationIntervalMs,
+            "FEED_CREDIT_RECONCILIATION_INTERVAL_MS",
+            { minimum: 100, maximum: 60_000 }
+        ),
         stripeTestSecretKey,
         stripeTestWebhookSecret,
         centralDatabaseType,

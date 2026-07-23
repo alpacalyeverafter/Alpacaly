@@ -144,7 +144,7 @@ test("persistence diagnostics are platform-protected and secret-free", async () 
         .expect(200);
 
     assert.equal(response.body.persistence.databaseType, "sqlite");
-    assert.equal(response.body.persistence.schemaVersion, 13);
+    assert.equal(response.body.persistence.schemaVersion, 14);
     assert.ok(response.body.coordination.feedIntents.claims);
     const serialized = JSON.stringify(response.body).toLowerCase();
     assert.equal(serialized.includes("database_url"), false);

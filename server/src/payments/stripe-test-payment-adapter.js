@@ -58,6 +58,7 @@ export class StripeTestPaymentAdapter {
         paymentRequestId,
         amountMinor,
         currency,
+        credits,
         successUrl,
         cancelUrl
     }) {
@@ -66,7 +67,7 @@ export class StripeTestPaymentAdapter {
         try {
             session = await this.checkoutSessionCreator({
                 mode: "payment",
-                submit_type: "donate",
+                submit_type: "pay",
                 client_reference_id: paymentRequestId,
                 success_url: successUrl,
                 cancel_url: cancelUrl,
@@ -76,8 +77,9 @@ export class StripeTestPaymentAdapter {
                         currency: currency.toLowerCase(),
                         unit_amount: amountMinor,
                         product_data: {
-                            name: "Alpacaly measured feed sponsorship request",
-                            description: "Subject to animal-welfare and operational approval."
+                            name: `${credits} Alpacaly Feed Credit${credits === 1 ? "" : "s"}`,
+                            description:
+                                "Credits provide the right to request a feed. They do not guarantee a dispense."
                         }
                     }
                 }],

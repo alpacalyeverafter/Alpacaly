@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 
+import { presentPublicFeedRequest } from "../src/routes/public-api-presenters.js";
+
 const require = createRequire(import.meta.url);
 const { AlpacalyApiClient, ApiClientError } = require("../../js/api-client.js");
 const { ServerEventEngine } = require("../../js/event-engine.js");
@@ -10,6 +12,31 @@ const { PaymentGateway } = require("../../js/payment-gateway.js");
 const browserConfig = Object.freeze({
     DEMO_MAX_FEEDS: 100,
     apiPollIntervalMs: 5000
+});
+
+test("public lifecycle updates expose only the server-authoritative countdown window", () => {
+    const presented = presentPublicFeedRequest({
+        eventId: "event-countdown-1",
+        state: "COUNTDOWN",
+        status: "COUNTDOWN",
+        updatedAt: "2026-07-22T20:00:00.000Z",
+        stateTimestamps: {
+            COUNTDOWN: "2026-07-22T20:00:00.000Z"
+        },
+        timeline: [{
+            state: "COUNTDOWN",
+            timestamp: "2026-07-22T20:00:00.000Z",
+            details: { durationMs: 10_000 }
+        }]
+    });
+
+    assert.deepEqual(presented.countdown, {
+        startedAt: "2026-07-22T20:00:00.000Z",
+        durationMs: 10_000,
+        endsAt: "2026-07-22T20:00:10.000Z"
+    });
+    assert.equal(presented.timeline, undefined);
+    assert.equal(presented.stateTimestamps, undefined);
 });
 
 function jsonResponse(payload, status = 200) {
@@ -55,25 +82,70 @@ test("browser payment boundary creates and reads server-backed sandbox payments"
     const gateway = new PaymentGateway(client);
 
     await gateway.createCheckoutSession({
-        supporterName: "Ada",
-        clientRequestId: "stripe-test-request-1"
+        packId: "feed_credit_3",
+        clientRequestId: "stripe-test-request-1",
+        walletToken: "wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890"
     });
-    await gateway.getPaymentRequest("payment-request-1");
+    await gateway.getPaymentRequest(
+        "payment-request-1",
+        "wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890"
+    );
 
     assert.equal(
         capturedRequests[0].url,
-        "http://localhost:3000/api/payments/checkout-sessions"
+        "http://localhost:3000/api/feed-credits/checkout-sessions"
     );
     assert.deepEqual(JSON.parse(capturedRequests[0].options.body), {
-        supporterName: "Ada",
         clientRequestId: "stripe-test-request-1",
-        amountMinor: 500,
-        currency: "GBP"
+        packId: "feed_credit_3"
     });
+    assert.equal(
+        capturedRequests[0].options.headers.authorization,
+        "Wallet wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890"
+    );
     assert.equal(
         capturedRequests[1].url,
         "http://localhost:3000/api/payments/requests/payment-request-1"
     );
+    assert.equal(
+        capturedRequests[1].options.headers.authorization,
+        "Wallet wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890"
+    );
+});
+
+test("browser Feed Credit boundary reserves, confirms and cancels through wallet auth", async () => {
+    const capturedRequests = [];
+    const walletToken = "wallet-token-abcdefghijklmnopqrstuvwxyz-1234567890";
+    const client = new AlpacalyApiClient({
+        baseUrl: "http://localhost:3000",
+        fetchImpl: async (url, options) => {
+            capturedRequests.push({ url, options });
+            return jsonResponse({ reservation: { reservationId: "reservation-1" } });
+        }
+    });
+
+    await client.reserveFeedCredit({
+        clientRequestId: "feed-request-browser-1",
+        walletToken
+    });
+    await client.heartbeatFeedCreditReservation("reservation-1", walletToken, true);
+    await client.confirmFeedCreditReservation("reservation-1", walletToken);
+    await client.cancelFeedCreditReservation("reservation-1", walletToken);
+
+    assert.deepEqual(JSON.parse(capturedRequests[0].options.body), {
+        clientRequestId: "feed-request-browser-1"
+    });
+    assert.equal(
+        capturedRequests[0].url,
+        "http://localhost:3000/api/feed-credits/reservations"
+    );
+    assert.equal(
+        capturedRequests[2].url,
+        "http://localhost:3000/api/feed-credits/reservations/reservation-1/confirm"
+    );
+    assert.ok(capturedRequests.every(item => (
+        item.options.headers.authorization === `Wallet ${walletToken}`
+    )));
 });
 
 test("browser API client sends only the configured development identity to admin APIs", async () => {

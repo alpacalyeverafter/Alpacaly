@@ -23,6 +23,7 @@ import {
     createStripeWebhookRouter
 } from "./routes/payments.js";
 import { createResourceQueuesRouter } from "./routes/resource-queues.js";
+import { createFeedCreditsRouter } from "./routes/feed-credits.js";
 
 export function createApp(options = {}) {
     const config = options.config || loadConfig();
@@ -96,6 +97,7 @@ export function createApp(options = {}) {
     app.locals.deviceCommandServices = deviceCommandServices;
     app.locals.contributionLedgerServices = contributionLedgerServices;
     app.locals.paymentServices = paymentServices;
+    app.locals.feedCreditServices = paymentServices.feedCreditServices;
     app.locals.administratorSecurityServices = administratorSecurityServices;
     app.locals.operatorSafetyServices = operatorSafetyServices;
     app.locals.recoverySafetyService = eventEngine.recoverySafetyService;
@@ -150,6 +152,10 @@ export function createApp(options = {}) {
             contributionLedgerServices.developmentWebsiteContributionService
     }));
     app.use("/api/payments", createPaymentsRouter({
+        paymentService: paymentServices.paymentService
+    }));
+    app.use("/api/feed-credits", createFeedCreditsRouter({
+        feedCreditService: paymentServices.feedCreditServices.service,
         paymentService: paymentServices.paymentService
     }));
     app.use("/api/admin", authenticateAdministrator(

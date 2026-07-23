@@ -276,6 +276,56 @@ export function createAdministratorRouter({
     );
 
     router.get(
+        "/feed-credits",
+        authorize(
+            services,
+            PERMISSIONS.VIEW_AUDIT_HISTORY,
+            () => ({ targetType: "FEED_CREDIT_LEDGER" }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                res.status(200).json({
+                    feedCredits: paymentServices.feedCreditServices.service
+                        .getAdministratorView({ limit: req.query.limit }),
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.post(
+        "/feed-credits/wallets/:walletId/corrections",
+        authorize(
+            services,
+            PERMISSIONS.MANAGE_SECURITY_CONFIGURATION,
+            req => ({
+                targetType: "FEED_CREDIT_WALLET",
+                targetId: req.params.walletId
+            }),
+            { platformWide: true }
+        ),
+        (req, res, next) => {
+            try {
+                const result = paymentServices.feedCreditServices.service
+                    .applyAdministrativeCorrection(
+                        req.params.walletId,
+                        req.body,
+                        req.administratorIdentity.administratorId
+                    );
+                res.status(result.duplicate ? 200 : 201).json({
+                    ...result,
+                    requestId: req.requestId
+                });
+            } catch (error) {
+                next(error);
+            }
+        }
+    );
+
+    router.get(
         "/barns/:barnId/audit-records",
         authorize(services, PERMISSIONS.VIEW_AUDIT_HISTORY),
         (req, res, next) => {

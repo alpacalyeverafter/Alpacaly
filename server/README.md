@@ -1,5 +1,21 @@
 # Alpacaly Event Engine Server
 
+## Phase 8C Feed Credit wallet and click-to-feed
+
+Stripe Test Mode checkout now buys durable **Feed Credits** only. It never
+starts a feed. The supporter deliberately reserves one credit, waits for the
+Event Engine to reach **Your turn**, keeps the livestream page active and
+confirms before the existing 10-second countdown may begin. Safely confirmed
+feeds redeem once; pre-dispense cancellations return the credit; uncertain
+physical outcomes remain reserved for operator review.
+
+The supporter and administrator pages keep the approved dark/olive cinematic
+design. SQLite migration 14 and PostgreSQL migration 6 add the append-only
+wallet ledger, purchases and restart-safe reservations. See
+[Phase 8C: Feed Credit Wallet and Click-to-Feed](docs/phase-8c-feed-credit-wallet-click-to-feed.md)
+for the journey, recovery token, credit rules, expiry/release behavior,
+refund/dispute handling, local sandbox demonstration and limitations.
+
 ## Phase 8B hardened sandbox pilot
 
 Start the complete local Stripe Test Mode demonstration from the repository root
@@ -134,7 +150,7 @@ Included:
 
 Intentionally excluded:
 
-- Stripe or any real payment processing
+- Stripe live-mode or any real payment processing
 - YouTube, TikTok, Facebook, or other provider integrations
 - Real managed OpenID Connect provider integration, passwords, and production sessions
 - Real feeder control, GPIO, Raspberry Pi, or ESP32 integration
@@ -212,6 +228,10 @@ The default server address is `http://localhost:3000`.
 | `DEVICE_COMMAND_RETRY_DELAY_MS` | `1000` | Delay before retrying a command confirmed not to have run. |
 | `DEVICE_COMMAND_MAXIMUM_ATTEMPTS` | `3` | Maximum safe delivery attempts before a command fails. |
 | `DEVICE_ACKNOWLEDGEMENT_TIMEOUT_MS` | `5000` | Deadline for a device acknowledgement before reconciliation. |
+| `FEED_CREDIT_RESERVATION_LIFETIME_MS` | `1800000` | Maximum waiting reservation lifetime before a safe credit release. |
+| `FEED_CREDIT_CONFIRMATION_TIMEOUT_MS` | `60000` | Time available to confirm after the Event Engine reaches **Your turn**. |
+| `FEED_CREDIT_PRESENCE_TTL_MS` | `15000` | Maximum age of the active-page heartbeat accepted for confirmation. |
+| `FEED_CREDIT_RECONCILIATION_INTERVAL_MS` | `1000` | Restart-safe reservation release and redemption reconciliation cadence. |
 | `DEVICE_TRANSPORT` | `in_process` | Selects `in_process` or `mqtt`; production never falls back automatically. |
 | `MQTT_ENVIRONMENT` | runtime environment | Environment-isolated topic namespace. |
 | `MQTT_PROTOCOL_VERSION` | `5` | MQTT wire version. Production requires 5. |
@@ -243,7 +263,7 @@ The default server address is `http://localhost:3000`.
 
 The central Event Store uses PostgreSQL in production and `node:sqlite` for zero-setup development/testing. File-backed SQLite databases retain foreign keys, write-ahead logging, full synchronous durability, and a five-second busy timeout. The independent edge journal remains SQLite in every environment.
 
-The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 11 adds daily feed reservations and distributed worker coordination; migration 12 adds central recovery safety state, restored-command reviews, and append-only disaster-recovery evidence. PostgreSQL migrations create the equivalent central schema, native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
+The schema is upgraded automatically through ordered migrations when the server connects. SQLite migration 14 adds Feed Credit wallets, purchases, reservations and an append-only ledger; PostgreSQL migration 6 adds the equivalent central tables. PostgreSQL also provides native timestamp/JSON types, database Event sequence, ownership records, foreign keys, relationship guards, and append-only triggers under a cross-instance advisory lock. The independent edge journal has its own schema version 1 and database file. Existing SQLite central data can be transferred with the documented offline migration tool.
 
 ## Backup and recovery commands
 

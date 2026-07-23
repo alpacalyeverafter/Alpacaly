@@ -1,5 +1,9 @@
 # Phase 8B: Sandbox Pilot Hardening Runbook
 
+> Phase 8C retains this hardened launcher but changes the supporter journey:
+> checkout buys Feed Credits only. The supporter must later reserve one credit,
+> reach **Your turn**, remain present and explicitly confirm before countdown.
+
 ## Authorization and safety boundary
 
 This runbook starts a **local Stripe sandbox demonstration**. Sandbox mode

@@ -1,5 +1,9 @@
 # Phase 8A: Live Website Sandbox-Payment MVP
 
+> Historical implementation note: Phase 8C supersedes the direct
+> payment-to-feed journey. A verified checkout now adds Feed Credits only and
+> cannot start a feed or countdown.
+
 ## Status and scope
 
 Phase 8A provides a complete local website journey using Stripe Test Mode and

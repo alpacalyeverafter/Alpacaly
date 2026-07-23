@@ -106,6 +106,7 @@ export class EventEngine {
         this.defaultResourceAssignment = this.eventStore.getDefaultResourceAssignment();
         this.deviceCommandService = null;
         this.safetyService = null;
+        this.lifecycleGateService = null;
 
         this.feedRequests = new Map();
         this.queueRuntimes = new FeederQueueManager(
@@ -332,6 +333,7 @@ export class EventEngine {
             ...this.cloneFeedRequest(feedRequest),
             state: presentedState,
             status: presentedState,
+            lifecycleState: feedRequest.state,
             queuePosition: queueIndex >= 0 ? queueIndex + 1 : null,
             estimatedWaitMs: queueIndex >= 0
                 ? this.estimateWaitForQueueIndex(queueIndex, feedRequest.feederId)
@@ -412,6 +414,22 @@ export class EventEngine {
 
     setSafetyService(safetyService) {
         this.safetyService = safetyService;
+    }
+
+    setLifecycleGateService(lifecycleGateService) {
+        this.lifecycleGateService = lifecycleGateService;
+    }
+
+    resumeLifecycle(eventId) {
+        const feedRequest = this.feedRequests.get(eventId);
+        if (!feedRequest) {
+            throw new ApplicationError("Feed request not found.", {
+                code: "FEED_REQUEST_NOT_FOUND",
+                statusCode: 404
+            });
+        }
+        this.scheduleProcessing(feedRequest.feederId);
+        return this.getFeedRequest(eventId);
     }
 
     subscribe(listener) {
@@ -684,6 +702,18 @@ export class EventEngine {
                 try {
                     archived = await this.runLifecycle(feedRequest, generation);
                 } catch (error) {
+                    try {
+                        this.lifecycleGateService?.onLifecycleFailure(
+                            feedRequest,
+                            error
+                        );
+                    } catch (gateError) {
+                        this.logger.error({
+                            event: "lifecycle_gate_failure_handler_failed",
+                            eventId,
+                            err: gateError
+                        }, "Feed Credit lifecycle failure handling failed safely");
+                    }
                     this.lifecycleClaimStore.fail(
                         claim,
                         this.lifecycleWorkerIdentity,
@@ -748,6 +778,10 @@ export class EventEngine {
                 this.emitEngineUpdate("QUEUE_IDLE", queueRuntime.feederId);
                 this.resolveIdleWaiters();
                 this.resolveShutdownWaiters();
+                if (queueRuntime.resumeAfterCurrent) {
+                    queueRuntime.resumeAfterCurrent = false;
+                    this.scheduleProcessing(queueRuntime.feederId);
+                }
             }
         }
     }
@@ -764,8 +798,27 @@ export class EventEngine {
 
     async runLifecycle(feedRequest, generation) {
         if (feedRequest.state === "QUEUED") {
+            const gate = this.lifecycleGateService?.evaluateLifecycleGate(
+                feedRequest
+            );
+            if (gate?.required && !gate.allowed) {
+                if (gate.cancel) {
+                    this.cancelBeforeDispense(
+                        feedRequest.eventId,
+                        gate.reason || "LIFECYCLE_GATE_CANCELLED"
+                    );
+                } else {
+                    this.emitEngineUpdate(
+                        "AWAITING_SUPPORTER_CONFIRMATION",
+                        feedRequest.feederId
+                    );
+                }
+                return false;
+            }
             this.transitionTo(feedRequest, "APPROVED", {
-                approval: "AUTOMATIC_PHASE_4"
+                approval: gate?.required
+                    ? "SUPPORTER_PRESENT_AND_CONFIRMED"
+                    : "AUTOMATIC_PHASE_4"
             });
         }
 
@@ -954,6 +1007,19 @@ export class EventEngine {
         if (emit) {
             this.emitTransition(feedRequest, timelineEntry);
         }
+        try {
+            this.lifecycleGateService?.onLifecycleTransition(
+                feedRequest,
+                nextState
+            );
+        } catch (error) {
+            this.logger.error({
+                event: "lifecycle_gate_transition_handler_failed",
+                eventId: feedRequest.eventId,
+                state: nextState,
+                err: error
+            }, "Feed Credit lifecycle transition will be reconciled");
+        }
     }
 
     validateFeedRequest(payload) {
@@ -1077,7 +1143,7 @@ export class EventEngine {
 
             if (
                 feedRequest.state === "ARCHIVED"
-                || feedRequest.safetyState === "CANCELLED_FOR_WELFARE"
+                || String(feedRequest.safetyState || "").startsWith("CANCELLED")
             ) {
                 this.requireQueueRuntime(feedRequest.feederId)
                     .archivedEventIds.push(feedRequest.eventId);
@@ -1103,7 +1169,7 @@ export class EventEngine {
 
             if (
                 feedRequest.state === "ARCHIVED"
-                || feedRequest.safetyState === "CANCELLED_FOR_WELFARE"
+                || String(feedRequest.safetyState || "").startsWith("CANCELLED")
             ) {
                 this.eventStore.removeFromQueue(queueEntry.eventId);
                 return;
@@ -1426,6 +1492,7 @@ export class EventEngine {
         }
         if (queueRuntime.activeEventId === eventId) {
             queueRuntime.activeEventId = null;
+            queueRuntime.resumeAfterCurrent = true;
         }
         this.emit({
             type: "FEED_REQUEST_SAFETY_CANCELLED",
@@ -1436,7 +1503,70 @@ export class EventEngine {
             feedRequest: this.summarizeFeedRequest(feedRequest),
             eventEngine: this.getSnapshot()
         });
+        try {
+            this.lifecycleGateService?.onLifecycleCancellation(
+                feedRequest,
+                "CANCELLED_FOR_WELFARE"
+            );
+        } catch (error) {
+            this.logger.error({
+                event: "lifecycle_gate_cancellation_handler_failed",
+                eventId,
+                err: error
+            }, "Feed Credit cancellation handling failed safely");
+        }
         this.scheduleProcessing(feedRequest.feederId);
+        return this.getFeedRequest(eventId);
+    }
+
+    cancelBeforeDispense(eventId, reason = "CANCELLED_BEFORE_DISPENSE") {
+        const feedRequest = this.feedRequests.get(eventId);
+        if (!feedRequest) {
+            throw new ApplicationError("Feed request not found.", {
+                code: "FEED_REQUEST_NOT_FOUND",
+                statusCode: 404
+            });
+        }
+        if (String(feedRequest.safetyState || "").startsWith("CANCELLED")) {
+            return this.getFeedRequest(eventId);
+        }
+        if (["COUNTDOWN", "BELL", "DISPENSING", "COMPLETE", "ARCHIVED"].includes(
+            feedRequest.state
+        )) {
+            return null;
+        }
+
+        const timestamp = this.clock().toISOString();
+        this.eventStore.setEventSafetyState(eventId, "CANCELLED", timestamp);
+        feedRequest.safetyState = "CANCELLED";
+        feedRequest.safetyUpdatedAt = timestamp;
+        feedRequest.updatedAt = timestamp;
+        const queueRuntime = this.requireQueueRuntime(feedRequest.feederId);
+        const queueIndex = queueRuntime.eventIds.indexOf(eventId);
+        if (queueIndex >= 0) {
+            this.eventStore.removeFromQueue(eventId);
+            queueRuntime.eventIds.splice(queueIndex, 1);
+        }
+        this.processingEventIds.delete(eventId);
+        this.processedEventIds.add(eventId);
+        if (!queueRuntime.archivedEventIds.includes(eventId)) {
+            queueRuntime.archivedEventIds.push(eventId);
+        }
+        if (queueRuntime.activeEventId === eventId) {
+            queueRuntime.activeEventId = null;
+        }
+        this.emit({
+            type: "FEED_REQUEST_CANCELLED",
+            eventId,
+            state: "CANCELLED",
+            timestamp,
+            reason,
+            feedRequest: this.summarizeFeedRequest(feedRequest),
+            eventEngine: this.getSnapshot()
+        });
+        if (!queueRuntime.processing) {
+            this.scheduleProcessing(feedRequest.feederId);
+        }
         return this.getFeedRequest(eventId);
     }
 

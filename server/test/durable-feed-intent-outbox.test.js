@@ -418,7 +418,7 @@ test("migration upgrades a stranded Phase 6C Contribution into durable work", t 
     );
     const eventId = migrated.eventStore.getEventIdByFeedIntent(intent.feedIntentId);
 
-    assert.equal(migrated.eventStore.getSchemaVersion(), 13);
+    assert.equal(migrated.eventStore.getSchemaVersion(), 14);
     assert.equal(intent.barnId, DEFAULT_RESOURCE_IDS.barnId);
     assert.ok(eventId);
     assert.equal(migrated.eventEngine.getFeedRequest(eventId).message, "Recovered migration message");

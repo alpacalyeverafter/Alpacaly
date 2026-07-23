@@ -14,17 +14,16 @@
             this.apiClient = apiClient;
         }
 
-        createCheckoutSession({ supporterName, clientRequestId }) {
-            return this.apiClient.createSandboxCheckoutSession({
-                supporterName,
+        createCheckoutSession({ packId, clientRequestId, walletToken }) {
+            return this.apiClient.createFeedCreditCheckout({
+                packId,
                 clientRequestId,
-                amountMinor: 500,
-                currency: "GBP"
+                walletToken
             });
         }
 
-        getPaymentRequest(paymentRequestId) {
-            return this.apiClient.getPaymentRequest(paymentRequestId);
+        getPaymentRequest(paymentRequestId, walletToken) {
+            return this.apiClient.getPaymentRequest(paymentRequestId, walletToken);
         }
     }
 

@@ -1,3 +1,34 @@
+function presentPublicCountdown(feedRequest) {
+    const state = feedRequest.state || feedRequest.status;
+    if (state !== "COUNTDOWN") {
+        return null;
+    }
+
+    const startedAt = feedRequest.stateTimestamps?.COUNTDOWN
+        || feedRequest.updatedAt
+        || null;
+    const countdownEntry = [...(feedRequest.timeline || [])]
+        .reverse()
+        .find(entry => entry.state === "COUNTDOWN");
+    const durationMs = Number(countdownEntry?.details?.durationMs);
+    const startedAtMs = Date.parse(startedAt);
+
+    if (
+        !startedAt
+        || !Number.isFinite(startedAtMs)
+        || !Number.isFinite(durationMs)
+        || durationMs <= 0
+    ) {
+        return null;
+    }
+
+    return {
+        startedAt,
+        durationMs,
+        endsAt: new Date(startedAtMs + durationMs).toISOString()
+    };
+}
+
 export function presentPublicFeedRequest(feedRequest) {
     if (!feedRequest) {
         return null;
@@ -13,7 +44,8 @@ export function presentPublicFeedRequest(feedRequest) {
         requestedAt: feedRequest.requestedAt,
         updatedAt: feedRequest.updatedAt,
         queuePosition: feedRequest.queuePosition,
-        estimatedWaitMs: feedRequest.estimatedWaitMs
+        estimatedWaitMs: feedRequest.estimatedWaitMs,
+        countdown: presentPublicCountdown(feedRequest)
     };
 }
 

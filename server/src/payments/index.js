@@ -1,6 +1,7 @@
 import { PaymentService } from "./payment-service.js";
 import { SandboxDiagnosticsService } from "./sandbox-diagnostics-service.js";
 import { StripeTestPaymentAdapter } from "./stripe-test-payment-adapter.js";
+import { createFeedCreditServices } from "../feed-credits/index.js";
 
 export function createPaymentServices({
     eventEngine,
@@ -12,6 +13,14 @@ export function createPaymentServices({
     checkoutSessionCreator = null,
     idGenerator
 }) {
+    const feedCreditServices = createFeedCreditServices({
+        eventEngine,
+        contributionLedgerServices,
+        config,
+        logger,
+        clock,
+        ...(idGenerator ? { idGenerator } : {})
+    });
     const paymentAdapter = adapter || new StripeTestPaymentAdapter({
         secretKey: config.stripeTestSecretKey,
         webhookSecret: config.stripeTestWebhookSecret,
@@ -22,6 +31,7 @@ export function createPaymentServices({
     const paymentService = new PaymentService({
         eventEngine,
         contributionLedgerServices,
+        feedCreditService: feedCreditServices.service,
         adapter: paymentAdapter,
         config,
         logger,
@@ -33,5 +43,10 @@ export function createPaymentServices({
         paymentAdapter,
         clock
     });
-    return { paymentAdapter, paymentService, sandboxDiagnosticsService };
+    return {
+        paymentAdapter,
+        paymentService,
+        sandboxDiagnosticsService,
+        feedCreditServices
+    };
 }

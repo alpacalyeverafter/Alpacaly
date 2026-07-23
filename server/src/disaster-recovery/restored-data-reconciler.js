@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 const COUNT_TABLES = Object.freeze([
     "ProviderEvents",
     "PaymentRequests",
+    "CreditWallets",
+    "CreditPurchases",
+    "CreditReservations",
+    "CreditLedgerEntries",
     "Contributions",
     "FeedIntents",
     "Outbox",
@@ -29,6 +33,10 @@ const COUNT_TABLES = Object.freeze([
 const UNIQUE_IDENTITIES = Object.freeze([
     ["ProviderEvents", "providerEventId"],
     ["PaymentRequests", "paymentRequestId"],
+    ["CreditWallets", "walletId"],
+    ["CreditPurchases", "purchaseId"],
+    ["CreditReservations", "reservationId"],
+    ["CreditLedgerEntries", "ledgerEntryId"],
     ["Contributions", "contributionId"],
     ["FeedIntents", "feedIntentId"],
     ["Events", "eventId"],
@@ -126,6 +134,37 @@ export class RestoredDataReconciler {
         );
 
         const relationships = {
+            creditPurchaseWalletOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM CreditPurchases purchase
+                LEFT JOIN CreditWallets wallet ON wallet.walletId = purchase.walletId
+                WHERE wallet.walletId IS NULL
+            `),
+            creditPurchasePaymentOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM CreditPurchases purchase
+                LEFT JOIN PaymentRequests payment
+                  ON payment.paymentRequestId = purchase.paymentRequestId
+                WHERE payment.paymentRequestId IS NULL
+            `),
+            creditReservationWalletOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM CreditReservations reservation
+                LEFT JOIN CreditWallets wallet ON wallet.walletId = reservation.walletId
+                WHERE wallet.walletId IS NULL
+            `),
+            creditLedgerWalletOrphans: count(this.database, `
+                SELECT COUNT(*) AS count FROM CreditLedgerEntries ledger
+                LEFT JOIN CreditWallets wallet ON wallet.walletId = ledger.walletId
+                WHERE wallet.walletId IS NULL
+            `),
+            negativeCreditBalances: count(this.database, `
+                SELECT COUNT(*) AS count FROM (
+                    SELECT walletId,
+                        SUM(availableDelta) AS available,
+                        SUM(reservedDelta) AS reserved,
+                        SUM(spentDelta) AS spent
+                    FROM CreditLedgerEntries GROUP BY walletId
+                ) balances
+                WHERE available < 0 OR reserved < 0 OR spent < 0
+            `),
             paymentContributionOrphans: count(this.database, `
                 SELECT COUNT(*) AS count FROM PaymentRequests payment
                 LEFT JOIN Contributions contribution
