@@ -120,7 +120,7 @@ test("PostgreSQL migrations and the central Event Store preserve domain behavior
         updatedAt: new Date().toISOString()
     });
 
-    assert.equal(eventStore.getSchemaVersion(), 5);
+    assert.equal(eventStore.getSchemaVersion(), 7);
     assert.equal(result.created, true);
     assert.equal(eventStore.getFeedIntent(result.feedIntent.feedIntentId).status, "COMPLETED");
     assert.equal(eventStore.getEventIdByFeedIntent(result.feedIntent.feedIntentId),
